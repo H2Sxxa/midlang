@@ -2,8 +2,10 @@ use anyhow::Result;
 use chrono::Utc;
 use scc::HashMap;
 use serde::{Deserialize, Serialize};
-use sqlx::AnyPool;
+use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
+
+use crate::internals::worker::{WorkState, Workable};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Issue {
@@ -46,10 +48,10 @@ pub struct IssueCollector {
     // store
     pub pending: HashMap<IssueEvent, Issue>,
     pub batch: Option<Vec<Issue>>,
-    pool: AnyPool,
+    pool: Pool<Sqlite>,
 }
 impl IssueCollector {
-    pub fn new(pool: AnyPool) -> Self {
+    pub fn new(pool: Pool<Sqlite>) -> Self {
         IssueCollector {
             pending: HashMap::new(),
             batch: None,
@@ -115,5 +117,24 @@ impl IssueCollector {
         self.batch = None;
 
         Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl Workable for IssueCollector {
+    async fn work(&mut self) -> Result<WorkState> {
+        // Batch is None, safe to move pending into batch and clear pending
+        if let None = self.batch {
+            let mut batch: Vec<Issue> = vec![];
+            // Move all pending issues into the batch and clear pending
+            self.pending
+                .retain_async(|_, value| {
+                    batch.push(value.clone());
+                    false
+                })
+                .await;
+            self.batch = Some(batch);
+        }
+        Ok(WorkState::ACTIVE)
     }
 }

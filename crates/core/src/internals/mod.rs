@@ -1,25 +1,26 @@
-use sqlx::{AnyPool, SqlitePool};
+use anyhow::Result;
+use sqlx::SqlitePool;
 
-// Support PG/SQLite
 pub mod changelog;
-pub mod issues;
+pub mod issue;
 pub mod worker;
 
 #[derive(Default)]
 pub struct InternalService {
-    issue_collector: Option<issues::IssueCollector>,
-    sqlite_pool: Option<AnyPool>,
+    issue: Option<issue::IssueCollector>,
+    pool: Option<SqlitePool>,
 }
 
 impl InternalService {
-    pub fn issue_collector(&mut self, pool: AnyPool) {
-        self.issue_collector = Some(issues::IssueCollector::new(pool));
+    pub fn issue_collector(&mut self, pool: SqlitePool) -> &mut Self {
+        self.pool = Some(pool.clone());
+        self.issue = Some(issue::IssueCollector::new(pool));
+        self
     }
 
-    pub fn sqlite_pool(&mut self, pool: AnyPool) {
-        self.sqlite_pool = Some(pool);
-    }
-
-    pub fn issue_collector_sqlite() {
+    pub async fn issue_collector_sqlitepath(&mut self, path: &str) -> Result<&mut Self> {
+        let pool = SqlitePool::connect(path).await?;
+        self.issue = Some(issue::IssueCollector::new(pool));
+        Ok(self)
     }
 }

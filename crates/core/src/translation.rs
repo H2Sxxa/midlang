@@ -13,12 +13,10 @@ where
     Store: KVStore,
 {
     pub fn new(store: Store, cache_capacity: NonZeroUsize) -> Self {
-        let mut translation = Translation {
+        Translation {
             store,
             cache: LruCache::new(cache_capacity),
-        };
-        translation.store.init();
-        translation
+        }
     }
 
     pub fn get(&mut self, locale: &str, namespace: &str, key: &str) -> Option<String> {
@@ -30,11 +28,11 @@ where
         if let Some(value) = self.cache.get(&cache_key) {
             return Some(value.clone());
         }
-        if let Some(value) = self.store.get(locale, key) {
+        if let Ok(Some(value)) = self.store.get(locale, key) {
             self.cache.put(cache_key, value.clone());
             return Some(value);
         }
-        // TODO Event: TranslationNotFound
+        // TODO Event: TranslationNotFound / Failed get translation from store
         None
     }
 }

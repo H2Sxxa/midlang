@@ -1,7 +1,7 @@
-use std::num::NonZeroUsize;
-
 use super::store::KVStore;
+use anyhow::Result;
 use lru::LruCache;
+use std::num::NonZeroUsize;
 
 pub struct Translation<Store: KVStore> {
     store: Store,
@@ -19,20 +19,27 @@ where
         }
     }
 
-    pub fn get(&mut self, locale: &str, namespace: &str, key: &str) -> Option<String> {
+    pub fn get(&mut self, locale: &str, namespace: &str, key: &str) -> Result<Option<String>> {
         self.get_key(locale, &format!("{}.{}", namespace, key))
     }
 
-    pub fn get_key(&mut self, locale: &str, key: &str) -> Option<String> {
+    pub fn get_key(&mut self, locale: &str, key: &str) -> Result<Option<String>> {
         let cache_key = format!("{}:{}", locale, key);
         if let Some(value) = self.cache.get(&cache_key) {
-            return Some(value.clone());
+            return Ok(Some(value.clone()));
         }
-        if let Ok(Some(value)) = self.store.get(locale, key) {
+        if let Some(value) = self.store.get(locale, key)? {
             self.cache.put(cache_key, value.clone());
-            return Some(value);
+            return Ok(Some(value));
         }
         // TODO Event: TranslationNotFound / Failed get translation from store
-        None
+        Ok(None)
+    }
+
+    pub fn set(&mut self, locale: &str, key: &str, value: &str) -> Result<()> {
+        let cache_key = format!("{}:{}", locale, key);
+        self.cache.put(cache_key, value.to_string());
+        self.store.set(locale, key, value)?;
+        Ok(())
     }
 }

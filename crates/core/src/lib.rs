@@ -1,10 +1,34 @@
 pub mod internals;
-pub mod midlang;
 pub mod store;
 pub mod translation;
 
 #[cfg(test)]
 mod test {
-    #[test]
-    fn test_translation() {}
+    use std::{sync::Arc, time::Duration};
+
+    use sqlx::{Sqlite, SqlitePool, migrate::MigrateDatabase};
+    use tokio::time::sleep;
+
+    use crate::translation;
+
+    #[tokio::test]
+    async fn test_translation() {
+        Sqlite::create_database("sqlite.db").await.unwrap();
+        let internal = Arc::new(
+            crate::internals::InternalService::default()
+                .issue_collector(SqlitePool::connect("sqlite.db").await.unwrap())
+                .service(),
+        );
+
+        let mut translation = translation::Translation::new(
+            crate::store::RedbStore::new("translation.rdb").unwrap(),
+            std::num::NonZeroUsize::new(100).unwrap(),
+            internal.clone(),
+        );
+
+        let value = translation.get_key("zh-cn", "test").await.unwrap();
+        println!("value: {:?}", value);
+
+        sleep(Duration::from_secs(20)).await;
+    }
 }

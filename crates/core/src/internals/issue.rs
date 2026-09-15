@@ -1,11 +1,11 @@
+use crate::internals::worker::{WorkState, Workable};
 use anyhow::Result;
 use chrono::Utc;
 use scc::HashMap;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
+use tokio::sync::Mutex;
 use uuid::Uuid;
-
-use crate::internals::worker::{WorkState, Workable};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Issue {
@@ -47,14 +47,14 @@ impl IssueEvent {
 pub struct IssueCollector {
     // store
     pub pending: HashMap<IssueEvent, Issue>,
-    pub batch: Option<Vec<Issue>>,
+    pub batch: Mutex<Vec<Issue>>,
     pool: Pool<Sqlite>,
 }
 impl IssueCollector {
     pub fn new(pool: Pool<Sqlite>) -> Self {
         IssueCollector {
             pending: HashMap::new(),
-            batch: None,
+            batch: Mutex::new(Vec::new()),
             pool,
         }
     }
@@ -70,15 +70,16 @@ impl IssueCollector {
             .or_insert_with(|| Issue {
                 count: 1,
                 event: event,
-                last_seen: String::new(),
+                last_seen: Utc::now().to_rfc3339(),
             });
         Ok(())
     }
 
-    pub async fn commit(&mut self) -> Result<()> {
-        let Some(batch) = &self.batch else {
+    pub async fn commit(&self) -> Result<()> {
+        let mut guard = self.batch.lock().await;
+        if guard.is_empty() {
             return Ok(());
-        };
+        }
 
         let mut tx = self.pool.begin().await?;
         // Create the table if it doesn't exist
@@ -94,8 +95,7 @@ impl IssueCollector {
         )
         .execute(&mut *tx)
         .await?;
-
-        for issue in batch {
+        for issue in guard.iter() {
             sqlx::query(
                 "
             INSERT INTO midlang_issues (id, event, count, last_seen)
@@ -112,29 +112,25 @@ impl IssueCollector {
             .execute(&mut *tx)
             .await?;
         }
-
         tx.commit().await?;
-        self.batch = None;
-
+        guard.clear();
         Ok(())
     }
 }
 
 #[async_trait::async_trait]
 impl Workable for IssueCollector {
-    async fn work(&mut self) -> Result<WorkState> {
+    async fn work(&self) -> Result<WorkState> {
         // Batch is None, safe to move pending into batch and clear pending
-        if let None = self.batch {
-            let mut batch: Vec<Issue> = vec![];
-            // Move all pending issues into the batch and clear pending
-            self.pending
-                .retain_async(|_, value| {
-                    batch.push(value.clone());
-                    false
-                })
-                .await;
-            self.batch = Some(batch);
-        }
+        let mut guard = self.batch.lock().await;
+        self.pending
+            .retain_async(|_, value| {
+                guard.push(value.clone());
+                false
+            })
+            .await;
+        drop(guard);
+        self.commit().await?;
         Ok(WorkState::ACTIVE)
     }
 }

@@ -1,6 +1,6 @@
 use super::KVStore;
 use anyhow::Result;
-use redb::{Database, ReadableDatabase, TableDefinition};
+use redb::{Database, ReadableDatabase, TableDefinition, TableError};
 use std::path::Path;
 
 pub struct RedbStore {
@@ -21,9 +21,20 @@ impl KVStore for RedbStore {
 
     fn get(&self, locale: &str, key: &str) -> Result<Option<String>> {
         let tb = RedbTableDefinition::new(locale);
-        let table = self.db.begin_read()?.open_table(tb)?;
-        let value = table.get(key.to_string())?;
-        Ok(value.map(|e| e.value().to_string()))
+        match self.db.begin_read()?.open_table(tb) {
+            Ok(table) => {
+                let value = table.get(key.to_string())?;
+                Ok(value.map(|e| e.value().to_string()))
+            }
+            Err(TableError::TableDoesNotExist(_)) => {
+                // Table does not exist, return None
+                Ok(None)
+            }
+            Err(e) => {
+                // Other errors, propagate the error
+                Err(e.into())
+            }
+        }
     }
 
     fn delete(&mut self, locale: &str, key: &str) -> Result<()> {

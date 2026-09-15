@@ -3,10 +3,10 @@ use crate::store::{StoreError, ValueState};
 use super::KVStore;
 use anyhow::Result;
 use redb::{Database, ReadableDatabase, TableDefinition, TableError};
-use std::path::Path;
-
+use std::{path::Path, sync::Arc};
+#[derive(Clone)]
 pub struct RedbStore {
-    db: Database,
+    db: Arc<Database>,
 }
 
 pub type RedbTableDefinition<'a> = TableDefinition<'a, String, String>;
@@ -66,7 +66,7 @@ impl KVStore for RedbStore {
 impl RedbStore {
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         Ok(RedbStore {
-            db: Database::create(path)?,
+            db: Arc::new(Database::create(path)?),
         })
     }
 }

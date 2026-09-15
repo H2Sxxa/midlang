@@ -27,9 +27,9 @@ mod test {
                 .service(),
         );
 
-        let mut translation = translation::Translation::new(
+        let translation = translation::Translation::new(
             crate::store::RedbStore::new("translation.rdb").unwrap(),
-            std::num::NonZeroUsize::new(100).unwrap(),
+            100,
             internal.clone(),
         );
 

@@ -9,12 +9,12 @@ use crate::{
 
 use super::store::KVStore;
 use anyhow::Result;
-use lru::LruCache;
-use std::{num::NonZeroUsize, sync::Arc};
-
+use cached::ShardedLruCache;
+use std::sync::Arc;
+#[derive(Clone)]
 pub struct Translation<Store: KVStore> {
     store: Store,
-    cache: LruCache<String, String>,
+    cache: ShardedLruCache<String, String>,
     internal_service: Arc<InternalService>,
 }
 
@@ -24,27 +24,22 @@ where
 {
     pub fn new(
         store: Store,
-        cache_capacity: NonZeroUsize,
+        cache_capacity: usize,
         internal_service: Arc<InternalService>,
     ) -> Self {
         Translation {
             store,
-            cache: LruCache::new(cache_capacity),
+            cache: ShardedLruCache::new(cache_capacity),
             internal_service,
         }
     }
 
-    pub async fn get(
-        &mut self,
-        locale: &str,
-        namespace: &str,
-        key: &str,
-    ) -> Result<Option<String>> {
+    pub async fn get(&self, locale: &str, namespace: &str, key: &str) -> Result<Option<String>> {
         self.get_key(locale, &format!("{}.{}", namespace, key))
             .await
     }
 
-    pub async fn get_key(&mut self, locale: &str, key: &str) -> Result<Option<String>> {
+    pub async fn get_key(&self, locale: &str, key: &str) -> Result<Option<String>> {
         let cache_key = format!("{}:{}", locale, key);
         // Cache hit
         if let Some(value) = self.cache.get(&cache_key) {
@@ -54,7 +49,7 @@ where
         match self.store.get(locale, key) {
             Ok(value) => match value {
                 Some(value) => {
-                    self.cache.put(cache_key, value.clone());
+                    self.cache.set(cache_key, value.clone());
                     return Ok(Some(value));
                 }
                 None => {
@@ -92,7 +87,7 @@ where
     // Will block on changlog reporting, so should be called in a separate task
     pub async fn set(&mut self, locale: &str, key: &str, value: &str) -> Result<()> {
         let cache_key = format!("{}:{}", locale, key);
-        self.cache.put(cache_key, value.to_string());
+        self.cache.set(cache_key, value.to_string());
         match self.store.set(locale, key, value)? {
             ValueState::Updated(old_value) => {
                 self.internal_service
@@ -122,7 +117,7 @@ where
             .await?;
         // Clear cache after deletion to ensure that the next get will not return a stale value
         let cache_key = format!("{}:{}", locale, key);
-        self.cache.pop(&cache_key);
+        self.cache.remove(&cache_key);
         Ok(())
     }
 }

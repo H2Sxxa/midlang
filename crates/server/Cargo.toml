@@ -1,0 +1,16 @@
+[package]
+name = "midlang-server"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "midlang"
+path = "src/main.rs"
+
+[dependencies]
+midlang-core = { path = "../core" }
+tokio.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+axum = { version = "0.8.9", features = ["macros"] }

@@ -1,5 +1,5 @@
 use crate::internals::worker::{WorkState, Workable};
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use chrono::Utc;
 use scc::HashMap;
 use serde::{Deserialize, Serialize};
@@ -17,6 +17,7 @@ pub struct Issue {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Deserialize, Serialize)]
 pub enum IssueEvent {
     MissingTranslation { locale: String, key: String },
+    MissingLocale { locale: String },
 }
 
 impl IssueEvent {
@@ -28,6 +29,9 @@ impl IssueEvent {
                     locale, key
                 )
             }
+            IssueEvent::MissingLocale { locale } => {
+                format!("Missing locale '{}'", locale)
+            }
         }
     }
 
@@ -37,6 +41,9 @@ impl IssueEvent {
             match self {
                 IssueEvent::MissingTranslation { locale, key } => {
                     format!("MISS:{}:{}", locale, key)
+                }
+                IssueEvent::MissingLocale { locale } => {
+                    format!("MISS:{}", locale)
                 }
             }
             .as_bytes(),
@@ -51,12 +58,30 @@ pub struct IssueCollector {
     pool: Pool<Sqlite>,
 }
 impl IssueCollector {
-    pub fn new(pool: Pool<Sqlite>) -> Self {
-        IssueCollector {
+    pub async fn new(pool: Pool<Sqlite>) -> Result<Self> {
+        let ic = IssueCollector {
             pending: HashMap::new(),
             batch: Mutex::new(Vec::new()),
             pool,
-        }
+        };
+        ic.ensure_table().await?;
+        Ok(ic)
+    }
+
+    pub async fn ensure_table(&self) -> Result<()> {
+        sqlx::query(
+            "
+        CREATE TABLE IF NOT EXISTS midlang_issues (
+            id TEXT PRIMARY KEY NOT NULL,
+            event TEXT NOT NULL,
+            count INTEGER NOT NULL,
+            last_seen TEXT NOT NULL
+        )
+        ",
+        )
+        .execute(&mut *self.pool.acquire().await?)
+        .await?;
+        Ok(())
     }
 
     pub async fn report(&self, event: IssueEvent) -> Result<()> {
@@ -83,18 +108,7 @@ impl IssueCollector {
 
         let mut tx = self.pool.begin().await?;
         // Create the table if it doesn't exist
-        sqlx::query(
-            "
-        CREATE TABLE IF NOT EXISTS midlang_issues (
-            id CHAR(36) PRIMARY KEY NOT NULL,
-            event TEXT NOT NULL,
-            count INTEGER NOT NULL,
-            last_seen TEXT NOT NULL
-        )
-        ",
-        )
-        .execute(&mut *tx)
-        .await?;
+
         for issue in guard.iter() {
             sqlx::query(
                 "

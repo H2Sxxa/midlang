@@ -14,9 +14,16 @@ mod test {
     #[tokio::test]
     async fn test_translation() {
         Sqlite::create_database("sqlite.db").await.unwrap();
+        let pool = SqlitePool::connect("sqlite.db").await.unwrap();
+
         let internal = Arc::new(
             crate::internals::InternalService::default()
-                .issue_collector(SqlitePool::connect("sqlite.db").await.unwrap())
+                .issue_collector(&pool)
+                .await
+                .unwrap()
+                .changelog_recorder(&pool)
+                .await
+                .unwrap()
                 .service(),
         );
 

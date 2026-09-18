@@ -30,11 +30,11 @@ where
         let router = Router::new()
             .route("/health", any(health::health))
             .route(
-                "/{locale}/{key}",
+                "/t/{locale}/{key}",
                 get(translate::translate_handler::<Store>),
             )
             .route(
-                "/{locale}/{namespace}/{key}",
+                "/t/{locale}/{namespace}/{key}",
                 get(translate::translate_namespace_handler::<Store>),
             )
             .with_state(self.translation.clone());

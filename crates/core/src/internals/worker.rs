@@ -46,9 +46,13 @@ impl Workplace {
                 tokio::select! {
                     _ = wp.cancel.cancelled() => break,
                     result = work.work() => {
-                        if let Err(err) = result {
-                            eprintln!("worker failed: {err:#}");
-                            break;
+                        match result {
+                            Ok(WorkState::ACTIVE) => {},
+                            Ok(WorkState::STOPPED) => break,
+                            Err(_) => {
+                                // TODO: Collect error and report it
+                                break;
+                            }
                         }
                     }
                 }
@@ -89,7 +93,7 @@ mod workplace {
     }
     #[tokio::test]
     async fn test_wp() {
-        let wp = Arc::new(Workplace::default());
+        let wp = Arc::new(Workplace::new(std::time::Duration::from_secs(1)));
         let _ = wp
             .go_work(Arc::new(Count10 {
                 count: AtomicUsize::new(0),

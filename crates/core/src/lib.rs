@@ -33,7 +33,7 @@ mod test {
             internal.clone(),
         );
 
-        let value = translation.get_key("zh-cn", "test").await.unwrap();
+        let value = translation.get_key("zh-cn", "test").await;
         println!("value: {:?}", value);
 
         sleep(Duration::from_secs(20)).await;

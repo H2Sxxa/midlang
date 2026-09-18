@@ -10,8 +10,27 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Issue {
     pub count: usize,
+    pub eventtype: String,
     pub event: IssueEvent,
     pub last_seen: String,
+    pub state: IssueState,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum IssueState {
+    Open,
+    Closed,
+    Ignored,
+}
+
+impl ToString for IssueState {
+    fn to_string(&self) -> String {
+        match self {
+            IssueState::Open => "open".to_string(),
+            IssueState::Closed => "closed".to_string(),
+            IssueState::Ignored => "ignored".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Deserialize, Serialize)]
@@ -20,8 +39,8 @@ pub enum IssueEvent {
     MissingLocale { locale: String },
 }
 
-impl IssueEvent {
-    pub fn format(&self) -> String {
+impl ToString for IssueEvent {
+    fn to_string(&self) -> String {
         match self {
             IssueEvent::MissingTranslation { locale, key } => {
                 format!(
@@ -32,6 +51,17 @@ impl IssueEvent {
             IssueEvent::MissingLocale { locale } => {
                 format!("Missing locale '{}'", locale)
             }
+        }
+    }
+}
+
+impl IssueEvent {
+    pub fn eventtype(&self) -> String {
+        match self {
+            IssueEvent::MissingTranslation { locale: _, key: _ } => {
+                "missing_translation".to_string()
+            }
+            IssueEvent::MissingLocale { locale: _ } => "missing_locale".to_string(),
         }
     }
 
@@ -75,8 +105,11 @@ impl IssueCollector {
             id TEXT PRIMARY KEY NOT NULL,
             event TEXT NOT NULL,
             count INTEGER NOT NULL,
-            last_seen TEXT NOT NULL
-        )
+            last_seen TEXT NOT NULL,
+            state TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_midlang_issues_state ON midlang_issues (state);
         ",
         )
         .execute(&mut *self.pool.acquire().await?)
@@ -94,8 +127,10 @@ impl IssueCollector {
             })
             .or_insert_with(|| Issue {
                 count: 1,
-                event: event,
+                eventtype: event.eventtype(),
+                event,
                 last_seen: Utc::now().to_rfc3339(),
+                state: IssueState::Open,
             });
         Ok(())
     }
@@ -110,19 +145,26 @@ impl IssueCollector {
         // Create the table if it doesn't exist
 
         for issue in guard.iter() {
+            // If Issue Ignored, skip it
             sqlx::query(
                 "
-            INSERT INTO midlang_issues (id, event, count, last_seen)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO midlang_issues (id, event, count, last_seen, state)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
                 count = midlang_issues.count + excluded.count,
-                last_seen = excluded.last_seen
+                last_seen = excluded.last_seen,
+                state = CASE
+                    WHEN midlang_issues.state = 'ignored'
+                        THEN midlang_issues.state
+                    ELSE excluded.state
+                END
             ",
             )
             .bind(issue.event.id().to_string())
-            .bind(issue.event.format())
+            .bind(issue.event.to_string())
             .bind(issue.count as i64)
             .bind(&issue.last_seen)
+            .bind(issue.state.to_string())
             .execute(&mut *tx)
             .await?;
         }

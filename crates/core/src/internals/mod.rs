@@ -1,12 +1,13 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use anyhow::Result;
-use sqlx::SqlitePool;
+use sqlx::{Sqlite, SqlitePool, migrate::MigrateDatabase};
 
 use crate::internals::changelog::ChangelogRecorder;
 
 pub mod changelog;
 pub mod issue;
+pub mod management;
 pub mod worker;
 
 #[derive(Default)]
@@ -17,6 +18,26 @@ pub struct InternalService {
 }
 
 impl InternalService {
+    pub async fn conn(url: &str, issue: bool, changelog: bool) -> Result<Self> {
+        // Check if the database exists, if not, create it
+        if !url.starts_with("sqlite://") && !Path::new(url).exists() {
+            Sqlite::create_database(url).await?;
+        }
+        let pool = SqlitePool::connect(url).await?;
+
+        let mut internal = Self::default();
+        if issue {
+            internal.issue = Some(Arc::new(issue::IssueCollector::new(pool.clone()).await?));
+        }
+        if changelog {
+            internal.changelog = Some(Arc::new(
+                changelog::ChangelogRecorder::new(pool.clone()).await?,
+            ));
+        }
+
+        Ok(internal)
+    }
+
     pub async fn issue_collector(mut self, pool: &SqlitePool) -> Result<Self> {
         self.issue = Some(Arc::new(issue::IssueCollector::new(pool.clone()).await?));
         Ok(self)

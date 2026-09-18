@@ -49,8 +49,8 @@ impl Workplace {
                         match result {
                             Ok(WorkState::ACTIVE) => {},
                             Ok(WorkState::STOPPED) => break,
-                            Err(_) => {
-                                // TODO: Collect error and report it
+                            Err(err) => {
+                                tracing::error!("Workable work() returned an error: {:?}", err);
                                 break;
                             }
                         }

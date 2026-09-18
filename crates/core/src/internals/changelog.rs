@@ -24,7 +24,7 @@ pub struct Changelog {
     pub origin: String,
     pub message: Option<String>,
     pub state: ChangeState,
-    pub updated_at: String,
+    pub created_at: String,
 }
 
 impl Changelog {
@@ -41,7 +41,7 @@ impl Changelog {
             origin,
             message: Some(message),
             state,
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: chrono::Utc::now().to_rfc3339(),
         }
     }
 
@@ -52,7 +52,7 @@ impl Changelog {
             origin,
             message: None,
             state,
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: chrono::Utc::now().to_rfc3339(),
         }
     }
 }
@@ -78,7 +78,7 @@ impl ChangelogRecorder {
                 origin TEXT NOT NULL,
                 state TEXT NOT NULL,
                 message TEXT,
-                updated_at TEXT NOT NULL
+                created_at TEXT NOT NULL
             );
 
             CREATE INDEX IF NOT EXISTS idx_changelog_key_locale
@@ -99,7 +99,7 @@ impl ChangelogRecorder {
                 origin,
                 state,
                 message,
-                updated_at
+                created_at
             )
             VALUES (?, ?, ?, ?, ?, ?)
             "#,
@@ -109,7 +109,7 @@ impl ChangelogRecorder {
         .bind(&change.origin)
         .bind(change.state.to_string())
         .bind(&change.message)
-        .bind(&change.updated_at)
+        .bind(&change.created_at)
         .execute(&self.pool)
         .await?;
         Ok(())

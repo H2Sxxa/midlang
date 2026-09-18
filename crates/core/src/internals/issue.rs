@@ -12,6 +12,7 @@ pub struct Issue {
     pub count: usize,
     pub eventtype: String,
     pub event: IssueEvent,
+    pub created_at: String,
     pub last_seen: String,
     pub state: IssueState,
 }
@@ -129,6 +130,7 @@ impl IssueCollector {
                 count: 1,
                 eventtype: event.eventtype(),
                 event,
+                created_at: Utc::now().to_rfc3339(),
                 last_seen: Utc::now().to_rfc3339(),
                 state: IssueState::Open,
             });
@@ -148,8 +150,8 @@ impl IssueCollector {
             // If Issue Ignored, skip it
             sqlx::query(
                 "
-            INSERT INTO midlang_issues (id, event, count, last_seen, state)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO midlang_issues (id, event, count, last_seen, state, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
                 count = midlang_issues.count + excluded.count,
                 last_seen = excluded.last_seen,
@@ -165,6 +167,7 @@ impl IssueCollector {
             .bind(issue.count as i64)
             .bind(&issue.last_seen)
             .bind(issue.state.to_string())
+            .bind(&issue.created_at)
             .execute(&mut *tx)
             .await?;
         }

@@ -11,5 +11,6 @@ export type NavItem = {
 
 export const navItems: ReadonlyArray<NavItem> = [
   { to: "/", label: "Overview", icon: SquaresFourIcon },
+  
   { to: "/settings", label: "Settings", icon: GearSixIcon },
 ]

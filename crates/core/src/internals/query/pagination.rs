@@ -1,48 +1,71 @@
-use anyhow::Result;
-use base64::{Engine, prelude::BASE64_STANDARD};
-use serde::{Deserialize, Serialize};
+use std::fmt::{self, Display};
 
+use anyhow::{Context, Result};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+/// Default number of items returned for a page when the caller does not ask for a size.
+pub const DEFAULT_PAGE_SIZE: usize = 100;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SortOrder {
     Asc,
     Desc,
 }
 
-pub const DEFAULT_PAGE_SIZE: usize = 100;
-
-impl ToString for SortOrder {
-    fn to_string(&self) -> String {
+impl Display for SortOrder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SortOrder::Asc => "ASC".to_string(),
-            SortOrder::Desc => "DESC".to_string(),
+            SortOrder::Asc => f.write_str("ASC"),
+            SortOrder::Desc => f.write_str("DESC"),
         }
     }
 }
 
-// Require data to be serializable and deserializable for Cursor
+/// Keyset cursor for one sort key plus its tiebreaker.
+///
+/// `K` is the per-table closed set of supported sort keys, so each table gets
+/// its own concrete cursor type:
+///
+/// ```text
+/// enum ChangelogKey {
+///     Id { id: i64 },
+///     CreatedAt { created_at: String, id: i64 },
+/// }
+/// type ChangelogCursor = QueryCursor<ChangelogKey>;
+/// ```
+///
+/// Because the set is closed, the variant already identifies the query and its
+/// ordering, so no ordering whitelist or query fingerprint is needed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueryCursor<D> {
-    pub data: D,
+pub struct QueryCursor<K> {
+    pub order: SortOrder,
+    pub key: K,
 }
 
-impl<D> QueryCursor<D> {
-    pub fn new(data: D) -> Self {
-        QueryCursor { data }
+impl<K> QueryCursor<K> {
+    pub fn new(order: SortOrder, key: K) -> Self {
+        QueryCursor { order, key }
     }
 
+    /// Encodes the cursor as URL-safe unpadded base64 so it can be placed in a
+    /// query string or header without further escaping.
     pub fn encode(&self) -> Result<String>
     where
-        D: Serialize,
+        K: Serialize,
     {
-        let json = serde_json::to_string(&self)?;
-        Ok(BASE64_STANDARD.encode(json))
+        let json = serde_json::to_vec(self).context("failed to serialize cursor")?;
+        Ok(URL_SAFE_NO_PAD.encode(json))
     }
 
-    pub fn decode(encoded: &str) -> Result<D>
+    /// Decodes a token produced by [`QueryCursor::encode`].
+    pub fn decode(encoded: &str) -> Result<Self>
     where
-        D: for<'de> Deserialize<'de>,
+        K: DeserializeOwned,
     {
-        let json = BASE64_STANDARD.decode(encoded)?;
-        let cursor: QueryCursor<D> = serde_json::from_slice(&json)?;
-        Ok(cursor.data)
+        let json = URL_SAFE_NO_PAD
+            .decode(encoded)
+            .context("cursor is not valid URL-safe base64")?;
+        serde_json::from_slice(&json).context("cursor payload is not valid JSON")
     }
 }

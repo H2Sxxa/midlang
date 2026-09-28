@@ -22,30 +22,41 @@ impl Display for SortOrder {
     }
 }
 
-/// Keyset cursor for one sort key plus its tiebreaker.
+/// Keyset cursor that carries everything a page needs: the ordering, the filter
+/// and the position to resume from.
 ///
-/// `K` is the per-table closed set of supported sort keys, so each table gets
-/// its own concrete cursor type:
+/// `K` is the filter (which rows are in scope, e.g. a keyword) and `N` is the
+/// position (the sort key of the last row that was returned, e.g. the entry
+/// key). Page one is [`QueryCursor::new`] with `next: None`; every following
+/// page passes back the cursor of the previous page, so the ordering and filter
+/// cannot drift away from the position.
+///
+/// A table that sorts on a single unique key uses that key directly, a table
+/// that sorts on more than one column uses a closed enum:
 ///
 /// ```text
+/// type KVCursor = QueryCursor<KVFilter, String>;
+///
 /// enum ChangelogKey {
 ///     Id { id: i64 },
 ///     CreatedAt { created_at: String, id: i64 },
 /// }
-/// type ChangelogCursor = QueryCursor<ChangelogKey>;
+/// type ChangelogCursor = QueryCursor<ChangelogFilter, ChangelogKey>;
 /// ```
-///
-/// Because the set is closed, the variant already identifies the query and its
-/// ordering, so no ordering whitelist or query fingerprint is needed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueryCursor<K> {
+pub struct QueryCursor<K, N> {
     pub order: SortOrder,
-    pub key: K,
+    pub filter: K,
+    pub next: Option<N>,
 }
 
-impl<K> QueryCursor<K> {
-    pub fn new(order: SortOrder, key: K) -> Self {
-        QueryCursor { order, key }
+impl<K, N> QueryCursor<K, N> {
+    pub fn new(order: SortOrder, filter: K) -> Self {
+        QueryCursor {
+            order,
+            filter,
+            next: None,
+        }
     }
 
     /// Encodes the cursor as URL-safe unpadded base64 so it can be placed in a
@@ -53,6 +64,7 @@ impl<K> QueryCursor<K> {
     pub fn encode(&self) -> Result<String>
     where
         K: Serialize,
+        N: Serialize,
     {
         let json = serde_json::to_vec(self).context("failed to serialize cursor")?;
         Ok(URL_SAFE_NO_PAD.encode(json))
@@ -62,6 +74,7 @@ impl<K> QueryCursor<K> {
     pub fn decode(encoded: &str) -> Result<Self>
     where
         K: DeserializeOwned,
+        N: DeserializeOwned,
     {
         let json = URL_SAFE_NO_PAD
             .decode(encoded)

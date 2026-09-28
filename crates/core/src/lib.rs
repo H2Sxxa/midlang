@@ -1,4 +1,5 @@
 pub mod internals;
+pub mod query;
 pub mod store;
 pub mod translation;
 

@@ -8,7 +8,6 @@ use crate::internals::changelog::ChangelogRecorder;
 pub mod changelog;
 pub mod issue;
 pub mod management;
-pub mod query;
 pub mod worker;
 
 #[derive(Default)]

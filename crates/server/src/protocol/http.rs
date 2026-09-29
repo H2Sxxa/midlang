@@ -1,6 +1,8 @@
 use std::net::SocketAddr;
 
 pub mod health;
+pub mod openapi;
+pub mod store;
 pub mod translate;
 
 use anyhow::Result;
@@ -41,6 +43,7 @@ where
 
     pub async fn serve(&self) -> Result<()> {
         let protected = Router::new()
+            .route("/store/statistics", get(store::statistics_handler::<Store>))
             .route(
                 "/t/{locale}/{key}",
                 get(translate::translate_handler::<Store>)
@@ -57,6 +60,7 @@ where
 
         let router = Router::new()
             .route("/health", any(health::health))
+            .route("/openapi.json", get(openapi::handler))
             .merge(protected)
             .with_state(self.translation.clone());
 

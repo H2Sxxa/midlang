@@ -1,6 +1,7 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { RouterProvider, createRouter } from "@tanstack/react-router"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { AuthProvider } from "@/components/auth-provider"
 import { useAuth } from "@/hooks/use-auth"
 import { routeTree } from "./routeTree.gen"
@@ -12,6 +13,8 @@ const router = createRouter({
   defaultPreload: "intent",
   scrollRestoration: true,
 })
+
+const queryClient = new QueryClient()
 
 declare module "@tanstack/react-router" {
   interface Register {
@@ -33,8 +36,10 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </QueryClientProvider>
   </StrictMode>
 )

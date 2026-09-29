@@ -18,7 +18,8 @@
 
     /* Path aliases, mirroring the alias map in components.json */
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@/api/*": ["./src/api/*"]
     },
 
     /* Linting */

@@ -7,8 +7,8 @@ use axum::{
 use midlang_core::store::StoreError;
 use serde::Serialize;
 
-#[derive(Serialize)]
-struct ErrorBody {
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ErrorBody {
     code: &'static str,
     message: String,
 }

@@ -19,4 +19,5 @@ rand.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 tracing.workspace = true
+utoipa.workspace = true
 uuid = { workspace = true, features = ["v4"] }

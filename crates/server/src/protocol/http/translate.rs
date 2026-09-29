@@ -10,22 +10,37 @@ use midlang_core::{
 };
 
 use crate::{
-    protocol::error,
+    protocol::{error, error::ErrorBody},
     secure::{self, AuthContext},
 };
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
 pub struct SetTranslationRequest {
     pub value: String,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 pub struct TranslationMessage {
     pub locale: String,
     pub key: String,
     pub value: String,
 }
 
+#[utoipa::path(
+    get,
+    path = "/t/{locale}/{key}",
+    params(
+        ("locale" = String, Path, description = "Locale identifier"),
+        ("key" = String, Path, description = "Translation key")
+    ),
+    responses(
+        (status = 200, description = "Translation found", body = TranslationMessage),
+        (status = 401, description = "Missing or invalid token", body = ErrorBody),
+        (status = 403, description = "Permission denied", body = ErrorBody),
+        (status = 404, description = "Translation not found", body = ErrorBody)
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn translate_handler<Store>(
     Path((locale, key)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
@@ -49,6 +64,22 @@ where
     }
 }
 
+#[utoipa::path(
+    put,
+    path = "/t/{locale}/{key}",
+    params(
+        ("locale" = String, Path, description = "Locale identifier"),
+        ("key" = String, Path, description = "Translation key")
+    ),
+    request_body = SetTranslationRequest,
+    responses(
+        (status = 200, description = "Translation updated", body = TranslationMessage),
+        (status = 401, description = "Missing or invalid token", body = ErrorBody),
+        (status = 403, description = "Permission denied", body = ErrorBody),
+        (status = 404, description = "Translation not found", body = ErrorBody)
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn set_translation_handler<Store>(
     Path((locale, key)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
@@ -76,6 +107,21 @@ where
     }
 }
 
+#[utoipa::path(
+    delete,
+    path = "/t/{locale}/{key}",
+    params(
+        ("locale" = String, Path, description = "Locale identifier"),
+        ("key" = String, Path, description = "Translation key")
+    ),
+    responses(
+        (status = 204, description = "Translation deleted"),
+        (status = 401, description = "Missing or invalid token", body = ErrorBody),
+        (status = 403, description = "Permission denied", body = ErrorBody),
+        (status = 404, description = "Translation not found", body = ErrorBody)
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn delete_translation_handler<Store>(
     Path((locale, key)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
@@ -94,6 +140,22 @@ where
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/t/{locale}/{namespace}/{key}",
+    params(
+        ("locale" = String, Path, description = "Locale identifier"),
+        ("namespace" = String, Path, description = "Translation namespace"),
+        ("key" = String, Path, description = "Translation key")
+    ),
+    responses(
+        (status = 200, description = "Translation found", body = TranslationMessage),
+        (status = 401, description = "Missing or invalid token", body = ErrorBody),
+        (status = 403, description = "Permission denied", body = ErrorBody),
+        (status = 404, description = "Translation not found", body = ErrorBody)
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn translate_namespace_handler<Store>(
     Path((locale, namespace, key)): Path<(String, String, String)>,
     Extension(auth): Extension<AuthContext>,
@@ -123,6 +185,23 @@ where
     }
 }
 
+#[utoipa::path(
+    put,
+    path = "/t/{locale}/{namespace}/{key}",
+    params(
+        ("locale" = String, Path, description = "Locale identifier"),
+        ("namespace" = String, Path, description = "Translation namespace"),
+        ("key" = String, Path, description = "Translation key")
+    ),
+    request_body = SetTranslationRequest,
+    responses(
+        (status = 200, description = "Translation updated", body = TranslationMessage),
+        (status = 401, description = "Missing or invalid token", body = ErrorBody),
+        (status = 403, description = "Permission denied", body = ErrorBody),
+        (status = 404, description = "Translation not found", body = ErrorBody)
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn set_namespace_translation_handler<Store>(
     Path((locale, namespace, key)): Path<(String, String, String)>,
     Extension(auth): Extension<AuthContext>,
@@ -151,6 +230,22 @@ where
     }
 }
 
+#[utoipa::path(
+    delete,
+    path = "/t/{locale}/{namespace}/{key}",
+    params(
+        ("locale" = String, Path, description = "Locale identifier"),
+        ("namespace" = String, Path, description = "Translation namespace"),
+        ("key" = String, Path, description = "Translation key")
+    ),
+    responses(
+        (status = 204, description = "Translation deleted"),
+        (status = 401, description = "Missing or invalid token", body = ErrorBody),
+        (status = 403, description = "Permission denied", body = ErrorBody),
+        (status = 404, description = "Translation not found", body = ErrorBody)
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn delete_namespace_translation_handler<Store>(
     Path((locale, namespace, key)): Path<(String, String, String)>,
     Extension(auth): Extension<AuthContext>,

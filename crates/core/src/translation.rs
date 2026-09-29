@@ -61,6 +61,10 @@ where
             }
         }
     }
+
+    pub fn statistics(&self) -> Result<crate::store::KVStatistics> {
+        self.store.statistics()
+    }
 }
 
 impl<Store> Translation<Store>

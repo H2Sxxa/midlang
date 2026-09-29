@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, error::Error, fmt::Display};
+use std::{collections::BTreeMap, error::Error, fmt::Display, sync::Arc};
 
 use anyhow::Result;
 use serde::Serialize;
@@ -32,10 +32,44 @@ pub trait KVRead {
 
 /// Write half of the store. Only the live store implements it, so a version
 /// snapshot has no write methods to call in the first place.
-pub trait KVStore: KVRead {
+pub trait KVStore: KVRead + Send + Sync {
+    /// Adds an observer without removing existing observers.
+    fn add_observer(&self, observer: Arc<dyn StoreObserver>);
     fn set(&self, locale: &str, key: &str, value: &str) -> Result<ValueState>;
     fn delete(&self, locale: &str, key: &str) -> Result<String>;
     fn delete_locale(&self, locale: &str) -> Result<()>;
+}
+
+impl<T: KVRead + ?Sized> KVRead for Arc<T> {
+    fn get(&self, locale: &str, key: &str) -> Result<Option<String>> {
+        (**self).get(locale, key)
+    }
+
+    fn list(&self, locale: &str, cursor: &KVCursor, limit: usize) -> Result<KVPage> {
+        (**self).list(locale, cursor, limit)
+    }
+
+    fn statistics(&self) -> Result<KVStatistics> {
+        (**self).statistics()
+    }
+}
+
+impl<T: KVStore + ?Sized> KVStore for Arc<T> {
+    fn add_observer(&self, observer: Arc<dyn StoreObserver>) {
+        (**self).add_observer(observer)
+    }
+
+    fn set(&self, locale: &str, key: &str, value: &str) -> Result<ValueState> {
+        (**self).set(locale, key, value)
+    }
+
+    fn delete(&self, locale: &str, key: &str) -> Result<String> {
+        (**self).delete(locale, key)
+    }
+
+    fn delete_locale(&self, locale: &str) -> Result<()> {
+        (**self).delete_locale(locale)
+    }
 }
 
 /// Write events a live store publishes so that services can keep derived state

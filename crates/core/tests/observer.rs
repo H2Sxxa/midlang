@@ -81,7 +81,7 @@ fn multiple_observers_receive_all_event_types() {
 
 #[test]
 fn attach_observer_replaces_existing_observers() {
-    let mut store = MemStore::new();
+    let store = MemStore::new();
     let first = Arc::new(CountingObserver::new());
     let second = Arc::new(CountingObserver::new());
 

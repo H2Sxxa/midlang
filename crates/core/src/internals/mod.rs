@@ -30,6 +30,15 @@ impl InternalService {
             Sqlite::create_database(url).await?;
         }
         let pool = SqlitePool::connect(url).await?;
+        Self::conn_with_pool(pool, issue, changelog, coverage).await
+    }
+
+    pub async fn conn_with_pool(
+        pool: SqlitePool,
+        issue: bool,
+        changelog: bool,
+        coverage: bool,
+    ) -> Result<Self> {
         schema::ensure_tables(&pool).await?;
 
         let mut internal = Self::default();

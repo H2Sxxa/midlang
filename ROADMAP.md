@@ -35,16 +35,21 @@ then versioned offline export is a derived capability over the same store.
   `StoreObserver` publishes committed writes to it. Issues are reported by
   missing translation reads, while changelog entries are recorded by
   translation mutations.
-- `crates/server`: `TCPProtocalServer` with axum routes `/health`,
-  `GET /t/{locale}/{key}` and `GET /t/{locale}/{namespace}/{key}`; `main.rs`
-  assembles store/internal/translation and binds `127.0.0.1` with a
-  configurable port. `/health` is currently a liveness endpoint; readiness
-  checks are not implemented.
+- `crates/server`: `HttpServer` with axum routes `/health` and authenticated
+  translation read/write/delete routes at `/t/{locale}/{key}` and
+  `/t/{locale}/{namespace}/{key}`. `secure` persists opaque bearer tokens and
+  permission groups in SQLite; reads require `translation:read`, writes require
+  `translation:write`, and deletes require `translation:delete`. Responses use
+  message objects (`locale`, `key`, `value`). `main.rs` assembles
+  store/internal/auth/translation and binds `127.0.0.1` with a configurable
+  port. `/health` is still only a liveness endpoint; readiness checks are not
+  implemented.
 - `crates/intl`: empty. `uds`, `rpc`, `grpc`: placeholders.
 - `web/midlang-webui`: login, overview and settings shell without data views.
-- Missing: no write HTTP API, no initial import, no issues/changelog/coverage
-  read API, no SDK, no deployment config, no versioning or export. Coverage is
-  maintained only when enabled and is not exposed over HTTP yet.
+- Missing: no initial import, no issues/changelog/coverage read API, no SDK, no
+  deployment config, no versioning or export. Coverage is maintained only when
+  enabled and is not exposed over HTTP yet. Token administration APIs and
+  resource scopes are also still pending.
 
 ## M1 - Deployable service
 
@@ -53,7 +58,8 @@ written.
 
 - Make binding address, SQLite path, store path and logging configurable instead
   of hardcoded. The current binary only makes the port configurable.
-- Expose the write path: `set`/`delete` over the API (only reads exist today).
+- Expose the write path: authenticated `PUT` with `{ "value": "..." }` and
+  `DELETE` over the API. **Implemented in the current server.**
 - Support importing an initial batch of translations, otherwise the service has
   nothing to serve.
 - Health/readiness, structured logs, graceful shutdown, single binary and

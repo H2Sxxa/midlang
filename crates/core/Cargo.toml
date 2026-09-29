@@ -5,15 +5,15 @@ edition = "2024"
 
 [dependencies]
 anyhow.workspace = true
-async-trait = "0.1.92"
-chrono = "0.4.45"
-redb = "4.2.0"
-scc = "3.8.8"
+async-trait.workspace = true
+chrono.workspace = true
+redb.workspace = true
+scc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sqlx = { version = "0.9.0", features = ["runtime-tokio", "sqlite"] }
+sqlx.workspace = true
 tokio.workspace = true
-tokio-util = { version = "0.7.19" }
-tracing = "0.1.44"
-uuid = { version = "1.26.1", features = ["v5"] }
-base64 = "0.23.1"
+tokio-util.workspace = true
+tracing.workspace = true
+uuid = { workspace = true, features = ["v5"] }
+base64.workspace = true

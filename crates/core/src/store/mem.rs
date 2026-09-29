@@ -38,7 +38,7 @@ impl MemStore {
         }
     }
 
-    pub fn attach_observer(&mut self, observer: Arc<dyn StoreObserver>) {
+    pub fn attach_observer(&self, observer: Arc<dyn StoreObserver>) {
         self.observers.replace(observer);
     }
 
@@ -135,6 +135,10 @@ impl KVRead for MemStore {
 }
 
 impl KVStore for MemStore {
+    fn add_observer(&self, observer: Arc<dyn StoreObserver>) {
+        self.observers.add(observer);
+    }
+
     fn set(&self, locale: &str, key: &str, value: &str) -> Result<ValueState> {
         let previous = {
             let mut data = self.write_data();

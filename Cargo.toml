@@ -4,6 +4,19 @@ members = ["crates/core", "crates/server"]
 
 [workspace.dependencies]
 anyhow = "1.0.104"
+async-trait = "0.1.92"
+axum = { version = "0.8.9", features = ["macros"] }
+base64 = "0.23.1"
+chrono = "0.4.45"
+clap = { version = "4.6.7", features = ["derive"] }
+rand = "0.10.3"
+redb = "4.2.0"
+scc = "3.8.8"
+sha2 = "0.11.0"
+sqlx = { version = "0.9.0", features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1.53.1", features = ["full"] }
+tokio-util = "0.7.19"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+tracing = "0.1.44"
+uuid = "1.26.1"

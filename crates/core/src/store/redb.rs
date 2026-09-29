@@ -127,6 +127,10 @@ impl KVRead for RedbStore {
 }
 
 impl KVStore for RedbStore {
+    fn add_observer(&self, observer: Arc<dyn StoreObserver>) {
+        self.observers.add(observer);
+    }
+
     fn set(&self, locale: &str, key: &str, value: &str) -> Result<ValueState> {
         let tb = RedbTableDefinition::new(locale);
         let write_tx = self.db.begin_write()?;
@@ -191,8 +195,8 @@ impl RedbStore {
         })
     }
 
-    /// Replaces all observers. Use [`Self::add_observer`] to append one.
-    pub fn attach_observer(&mut self, observer: Arc<dyn StoreObserver>) {
+    /// Replaces all observers. Prefer [`Self::add_observer`] to append one.
+    pub fn attach_observer(&self, observer: Arc<dyn StoreObserver>) {
         self.observers.replace(observer);
     }
 

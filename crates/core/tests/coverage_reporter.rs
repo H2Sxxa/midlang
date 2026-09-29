@@ -153,7 +153,7 @@ async fn reporter_supports_more_than_63_locales() -> Result<()> {
     internal.coverage = Some(reporter.clone());
 
     let store_path = temp_store_path();
-    let mut store = RedbStore::new(&store_path)?;
+    let store = RedbStore::new(&store_path)?;
     store.attach_observer(Arc::new(internal) as Arc<dyn StoreObserver>);
 
     store.set(REFERENCE, "shared", "source")?;
@@ -188,7 +188,7 @@ async fn run_scenario(seed: u64) -> Result<()> {
     internal.coverage = Some(reporter.clone());
 
     let store_path = temp_store_path();
-    let mut store = RedbStore::new(&store_path)?;
+    let store = RedbStore::new(&store_path)?;
     // The store talks to the internals service, which fans the write out to the
     // reporter, so the test covers the whole notification path.
     store.attach_observer(Arc::new(internal) as Arc<dyn StoreObserver>);

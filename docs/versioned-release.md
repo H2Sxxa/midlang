@@ -27,10 +27,13 @@ In scope:
 
 Not in scope:
 
-- the write API, batch import and the issues/changelog/coverage read APIs
-  (ROADMAP M1 to M3) - they are prerequisites, not part of this design;
+- batch import and the issues/changelog/coverage read APIs (ROADMAP M1 to M3)
+  - they are prerequisites, not part of this design. The live write API now
+  exists, but bulk loading is still not implemented;
 - the plurals/ICU value model;
-- publishing workflow, auth and multi-tenancy.
+- publishing workflow and multi-tenancy. Authentication is implemented for the
+  live HTTP routes, while the authorization policy for version routes is still
+  to be finalized.
 
 ## 3. Facts this design builds on
 
@@ -153,7 +156,7 @@ GET /v/{v}/stats/translations      KVStatistics for one version
 - Planned errors are distinct: unknown version, unknown locale within a known
   version, and missing key are `404`; an unreadable snapshot is `500` and is
   logged. No empty-success responses. The current
-  `crates/server/src/protocal/error.rs` only maps live-store errors; it does not
+  `crates/server/src/protocol/error.rs` only maps live-store errors; it does not
   implement version errors yet.
 
 ## 7. Snapshot production
@@ -283,8 +286,9 @@ D7. When is a version produced: only on explicit export, on a schedule, or on
 
 This design cannot be implemented before these exist:
 
-- a write API and a batch import (`set_batch`) - without them there is nothing
-  to snapshot and no way to load a real translation set (ROADMAP M1);
+- a batch import (`set_batch`) - the live write API is available, but without
+  bulk loading there is no practical way to load a real translation set
+  efficiently (ROADMAP M1);
 - configurable store/sqlite/versions paths and a deployable binary (M1);
 - an answer for "import while serving": redb has one writer, so a bulk import
   blocks online writes and a policy is needed (ROADMAP risks).

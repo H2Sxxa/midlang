@@ -9,13 +9,21 @@ use serde::Serialize;
 
 #[derive(Serialize)]
 struct ErrorBody {
-    error: String,
+    code: &'static str,
+    message: String,
 }
 
 /// The store does not hold this locale or key. It is a normal answer for a
 /// lookup, not a failure, so it is separated from [`store`].
 pub fn not_found(message: String) -> Response {
-    (StatusCode::NOT_FOUND, Json(ErrorBody { error: message })).into_response()
+    (
+        StatusCode::NOT_FOUND,
+        Json(ErrorBody {
+            code: "not_found",
+            message,
+        }),
+    )
+        .into_response()
 }
 
 /// Maps a store failure to a distinct response: a missing locale or key is a
@@ -30,7 +38,8 @@ pub fn store(err: Error) -> Response {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody {
-                    error: "internal error".to_string(),
+                    code: "internal_error",
+                    message: "internal error".to_string(),
                 }),
             )
                 .into_response()

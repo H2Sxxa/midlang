@@ -1,4 +1,4 @@
-use midlang_core::store::{KVCursor, KVStore, RedbStore, SortOrder};
+use midlang_core::store::{KVCursor, KVRead, KVStore, RedbStore, SortOrder};
 use redb::{Database, TableDefinition};
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -45,10 +45,10 @@ fn page(store: &RedbStore, cursor: &KVCursor, limit: usize) -> (usize, Option<KV
         "  filter={:?} limit={limit:<6} -> {:?} ({} rows, next={})",
         cursor.filter,
         start.elapsed(),
-        page.entries.len(),
+        page.items.len(),
         page.next.is_some()
     );
-    (page.entries.len(), page.next)
+    (page.items.len(), page.next)
 }
 
 #[test]

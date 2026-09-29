@@ -41,7 +41,7 @@ impl Workplace {
         work: Arc<W>,
     ) -> tokio::task::JoinHandle<()> {
         let wp = self.clone();
-        return tokio::spawn(async move {
+        tokio::spawn(async move {
             loop {
                 tokio::select! {
                     _ = wp.cancel.cancelled() => break,
@@ -49,9 +49,12 @@ impl Workplace {
                         match result {
                             Ok(WorkState::ACTIVE) => {},
                             Ok(WorkState::STOPPED) => break,
+                            // A service here derives state from notifications, so a
+                            // transient failure - a busy SQLite, a retryable I/O
+                            // error - must not stop it for the rest of the process;
+                            // the next tick retries with the work still queued.
                             Err(err) => {
                                 tracing::error!("Workable work() returned an error: {:?}", err);
-                                break;
                             }
                         }
                     }
@@ -61,7 +64,7 @@ impl Workplace {
                     _ = tokio::time::sleep(wp.duration) => {}
                 }
             }
-        });
+        })
     }
 }
 

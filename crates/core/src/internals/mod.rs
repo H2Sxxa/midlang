@@ -4,21 +4,26 @@ use anyhow::Result;
 use sqlx::{Sqlite, SqlitePool, migrate::MigrateDatabase};
 
 use crate::internals::changelog::ChangelogRecorder;
+use crate::store::StoreObserver;
 
 pub mod changelog;
+pub mod coverage;
 pub mod issue;
-pub mod management;
 pub mod worker;
 
+/// Owns every derived-state service and presents one
+/// [`StoreObserver`] to the store, so a store write reaches every service
+/// through a single attachment point.
 #[derive(Default)]
 pub struct InternalService {
     pub issue: Option<Arc<issue::IssueCollector>>,
     pub changelog: Option<Arc<changelog::ChangelogRecorder>>,
+    pub coverage: Option<Arc<coverage::CoverageReporter>>,
     workplace: Arc<worker::Workplace>,
 }
 
 impl InternalService {
-    pub async fn conn(url: &str, issue: bool, changelog: bool) -> Result<Self> {
+    pub async fn conn(url: &str, issue: bool, changelog: bool, coverage: bool) -> Result<Self> {
         // Check if the database exists, if not, create it
         if !url.starts_with("sqlite://") && !Path::new(url).exists() {
             Sqlite::create_database(url).await?;
@@ -32,6 +37,11 @@ impl InternalService {
         if changelog {
             internal.changelog = Some(Arc::new(
                 changelog::ChangelogRecorder::new(pool.clone()).await?,
+            ));
+        }
+        if coverage {
+            internal.coverage = Some(Arc::new(
+                coverage::CoverageReporter::new(pool.clone()).await?,
             ));
         }
 
@@ -52,6 +62,9 @@ impl InternalService {
         if let Some(issue_collector) = &self.issue {
             self.workplace.go_work(issue_collector.clone());
         }
+        if let Some(coverage) = &self.coverage {
+            self.workplace.go_work(coverage.clone());
+        }
         self
     }
 
@@ -67,5 +80,25 @@ impl InternalService {
             changelog_recorder.report_change(change).await?;
         }
         Ok(())
+    }
+}
+
+impl StoreObserver for InternalService {
+    fn on_set(&self, locale: &str, key: &str, value: &str) {
+        if let Some(coverage) = &self.coverage {
+            coverage.on_set(locale, key, value);
+        }
+    }
+
+    fn on_delete(&self, locale: &str, key: &str, old_value: &str) {
+        if let Some(coverage) = &self.coverage {
+            coverage.on_delete(locale, key, old_value);
+        }
+    }
+
+    fn on_delete_locale(&self, locale: &str) {
+        if let Some(coverage) = &self.coverage {
+            coverage.on_delete_locale(locale);
+        }
     }
 }

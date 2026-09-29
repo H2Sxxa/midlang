@@ -28,24 +28,31 @@ then versioned offline export is a derived capability over the same store.
 ## Current state
 
 - `crates/core`: `KVStore` + `RedbStore` (one redb table per locale,
-  `String -> String`), `Translation` with an LRU cache and `get`/`set`/`delete`,
-  `InternalService` with `IssueCollector` and `ChangelogRecorder` (SQLite, write
-  only).
+  `String -> String`), separate `KVRead`/`KVStore` traits, paged listing and
+  statistics, `MemStore`, and `Translation` with `get`/`set`/`delete`.
+  `Coverage` can measure a read-only store directly. The live
+  `CoverageReporter` keeps incremental coverage state in SQLite; a
+  `StoreObserver` publishes committed writes to it. Issues are reported by
+  missing translation reads, while changelog entries are recorded by
+  translation mutations.
 - `crates/server`: `TCPProtocalServer` with axum routes `/health`,
   `GET /t/{locale}/{key}` and `GET /t/{locale}/{namespace}/{key}`; `main.rs`
-  assembles store/internal/translation and binds `127.0.0.1:port`.
+  assembles store/internal/translation and binds `127.0.0.1` with a
+  configurable port. `/health` is currently a liveness endpoint; readiness
+  checks are not implemented.
 - `crates/intl`: empty. `uds`, `rpc`, `grpc`: placeholders.
 - `web/midlang-webui`: login, overview and settings shell without data views.
-- Missing: no write API, no initial import, no issues/changelog read API, no SDK,
-  no deployment config, no versioning or export.
+- Missing: no write HTTP API, no initial import, no issues/changelog/coverage
+  read API, no SDK, no deployment config, no versioning or export. Coverage is
+  maintained only when enabled and is not exposed over HTTP yet.
 
 ## M1 - Deployable service
 
 Goal: one command starts a service with a persistent store that can be read and
 written.
 
-- Make binding address, store path, sqlite path, cache size and logging
-  configurable instead of hardcoded.
+- Make binding address, SQLite path, store path and logging configurable instead
+  of hardcoded. The current binary only makes the port configurable.
 - Expose the write path: `set`/`delete` over the API (only reads exist today).
 - Support importing an initial batch of translations, otherwise the service has
   nothing to serve.
@@ -76,15 +83,19 @@ Goal: deliver the core online value, explaining translation problems.
 - Issues API: missing keys grouped by locale/namespace/key with first/last seen
   and counts.
 - Changelog API: per-key history (`origin`, `state`) plus rollback.
+- Coverage API: per-locale coverage against a reference locale plus a paged
+  missing-key listing, maintained incrementally rather than recomputed.
 - A minimal view (web UI or CLI) to see what is missing, what changed and how to
   roll it back.
 
-Done when: a key missing in production can be listed and located, and a change
-can be rolled back.
+Done when: a key missing in production can be listed and located, coverage can
+be queried, and a change can be rolled back.
 
 ## M4 - Versioned export
 
 Goal: export artifacts from a store version for offline release.
+
+Design: `docs/versioned-release.md` (version identity, snapshots, `/v/{v}`).
 
 - Version identity: content hash plus version number, and a `manifest.json` with
   the version, per-locale files and hashes.
@@ -92,7 +103,8 @@ Goal: export artifacts from a store version for offline release.
   same version is byte-identical anywhere.
 - Exporters, in order: native JSON, i18next, inlang, then XLIFF; each format
   declares what it cannot represent.
-- CLI/HTTP: `export --version <sha> --format <fmt> --out <dir>`.
+- CLI/HTTP: `export --version <number> --format <fmt> --out <dir>`; the
+  manifest also carries the content SHA-256.
 
 Done when: the same version exports byte-identically on any machine and drops
 into an existing release process.

@@ -4,6 +4,7 @@ use chrono::Utc;
 use scc::HashMap;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
+use std::fmt;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -24,12 +25,12 @@ pub enum IssueState {
     Ignored,
 }
 
-impl ToString for IssueState {
-    fn to_string(&self) -> String {
+impl fmt::Display for IssueState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            IssueState::Open => "open".to_string(),
-            IssueState::Closed => "closed".to_string(),
-            IssueState::Ignored => "ignored".to_string(),
+            IssueState::Open => write!(f, "open"),
+            IssueState::Closed => write!(f, "closed"),
+            IssueState::Ignored => write!(f, "ignored"),
         }
     }
 }
@@ -40,18 +41,15 @@ pub enum IssueEvent {
     MissingLocale { locale: String },
 }
 
-impl ToString for IssueEvent {
-    fn to_string(&self) -> String {
+impl fmt::Display for IssueEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            IssueEvent::MissingTranslation { locale, key } => {
-                format!(
-                    "Missing translation for locale '{}' and key '{}'",
-                    locale, key
-                )
-            }
-            IssueEvent::MissingLocale { locale } => {
-                format!("Missing locale '{}'", locale)
-            }
+            IssueEvent::MissingTranslation { locale, key } => write!(
+                f,
+                "Missing translation for locale '{}' and key '{}'",
+                locale, key
+            ),
+            IssueEvent::MissingLocale { locale } => write!(f, "Missing locale '{}'", locale),
         }
     }
 }
@@ -106,6 +104,7 @@ impl IssueCollector {
             id TEXT PRIMARY KEY NOT NULL,
             event TEXT NOT NULL,
             count INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
             last_seen TEXT NOT NULL,
             state TEXT NOT NULL
         );

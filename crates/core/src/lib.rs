@@ -1,3 +1,4 @@
+pub mod coverage;
 pub mod internals;
 pub mod query;
 pub mod store;
@@ -30,7 +31,6 @@ mod test {
 
         let translation = translation::Translation::new(
             crate::store::RedbStore::new("translation.rdb").unwrap(),
-            100,
             internal.clone(),
         );
 

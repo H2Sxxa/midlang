@@ -1,5 +1,6 @@
 use anyhow::Result;
 use sqlx::SqlitePool;
+use std::fmt;
 
 pub enum ChangeState {
     Created,
@@ -7,12 +8,12 @@ pub enum ChangeState {
     Deleted,
 }
 
-impl ToString for ChangeState {
-    fn to_string(&self) -> String {
+impl fmt::Display for ChangeState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ChangeState::Created => "created".to_string(),
-            ChangeState::Updated => "updated".to_string(),
-            ChangeState::Deleted => "deleted".to_string(),
+            ChangeState::Created => write!(f, "created"),
+            ChangeState::Updated => write!(f, "updated"),
+            ChangeState::Deleted => write!(f, "deleted"),
         }
     }
 }

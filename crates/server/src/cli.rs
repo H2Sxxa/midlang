@@ -1,4 +1,5 @@
 use clap::{Parser, builder::ValueParser};
+use std::{fmt, str::FromStr};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -14,10 +15,6 @@ pub struct Args {
     #[arg(long)]
     pub store_url: Option<String>,
 
-    /// The capacity of the lru cache.
-    #[arg(long, default_value_t = 10000)]
-    pub cache_capacity: usize,
-
     /// The URL of the SQLite database to use. This is only used when the database type is set to SQLite.
     #[arg(long)]
     pub sqlite_url: Option<String>,
@@ -27,6 +24,10 @@ pub struct Args {
     /// Whether to enable changelog.
     #[arg(long, default_value_t = true)]
     pub changelog: bool,
+    /// Whether to maintain per-locale translation coverage in SQLite. Costs one
+    /// scan of the store at startup; writes afterwards are incremental.
+    #[arg(long, default_value_t = false)]
+    pub coverage: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -35,16 +36,18 @@ pub enum StoreType {
     Redb,
 }
 
-impl ToString for StoreType {
-    fn to_string(&self) -> String {
+impl fmt::Display for StoreType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            StoreType::Redb => "redb".into(),
+            StoreType::Redb => write!(f, "redb"),
         }
     }
 }
 
-impl StoreType {
-    pub fn from_str(s: &str) -> Result<Self, String> {
+impl FromStr for StoreType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "redb" => Ok(StoreType::Redb),
             _ => Err(format!("Invalid store type: {}", s)),

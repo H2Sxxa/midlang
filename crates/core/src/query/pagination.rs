@@ -82,3 +82,15 @@ impl<K, N> QueryCursor<K, N> {
         serde_json::from_slice(&json).context("cursor payload is not valid JSON")
     }
 }
+
+/// One page of results plus the cursor that resumes the listing.
+///
+/// Every list surface (translations, issues, changelog) returns this shape, so
+/// pagination behaves identically everywhere: `next` is `None` on the last page
+/// and otherwise carries the ordering, the filter and the position, which keeps
+/// the resumed query from drifting away from the one that produced the page.
+#[derive(Debug, Clone, Serialize)]
+pub struct Page<T, C> {
+    pub items: Vec<T>,
+    pub next: Option<C>,
+}

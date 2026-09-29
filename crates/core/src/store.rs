@@ -1,29 +1,55 @@
-use std::{error::Error, fmt::Display};
+use std::{collections::BTreeMap, error::Error, fmt::Display};
 
 use anyhow::Result;
 use serde::Serialize;
 
-pub use crate::query::pagination::{QueryCursor, SortOrder};
-
+pub use crate::query::{Page, QueryCursor, SortOrder};
+pub mod mem;
+pub mod observer;
 pub mod redb;
+pub use observer::ObserverRegistry;
 
-/// Filter of a [`KVStore::list`] query: a case-insensitive substring matched
+// "locale:namespace.key":"Value"
+
+/// Filter of a [`KVRead::list`] query: a case-insensitive substring matched
 /// against the key or the value. redb only indexes the key order, so it is
 /// applied while scanning.
 pub type KVFilter = Option<String>;
 
-/// Cursor of a [`KVStore::list`] query, whose position is the last key returned.
+/// Cursor of a [`KVRead::list`] query, whose position is the last key returned.
 pub type KVCursor = QueryCursor<KVFilter, String>;
 
-// "locale:namespace.key":"Value"
-pub trait KVStore {
-    fn set(&self, locale: &str, key: &str, value: &str) -> Result<ValueState>;
+/// Read half of the store: implemented by the live store and, once versioned
+/// reading lands, by read-only snapshots of it.
+pub trait KVRead {
     fn get(&self, locale: &str, key: &str) -> Result<Option<String>>;
+    /// Returns one page of `limit` entries for `cursor`. Start with
+    /// [`QueryCursor::new`] and pass the previous [`Page::next`] afterwards.
+    fn list(&self, locale: &str, cursor: &KVCursor, limit: usize) -> Result<KVPage>;
+    /// Locale and entry counts read from table metadata, without scanning rows.
+    fn statistics(&self) -> Result<KVStatistics>;
+}
+
+/// Write half of the store. Only the live store implements it, so a version
+/// snapshot has no write methods to call in the first place.
+pub trait KVStore: KVRead {
+    fn set(&self, locale: &str, key: &str, value: &str) -> Result<ValueState>;
     fn delete(&self, locale: &str, key: &str) -> Result<String>;
     fn delete_locale(&self, locale: &str) -> Result<()>;
-    /// Returns one page of `limit` entries for `cursor`. Start with
-    /// [`QueryCursor::new`] and pass the previous [`KVPage::next`] afterwards.
-    fn list(&self, locale: &str, cursor: &KVCursor, limit: usize) -> Result<KVPage>;
+}
+
+/// Write events a live store publishes so that services can keep derived state
+/// in step without the store knowing about them.
+///
+/// Implementations are called from the store's synchronous write path, after
+/// the write has committed. They must therefore not block, must not fail and
+/// must not write back into the store; a service that needs to do asynchronous
+/// work (SQLite, HTTP) has to queue the event and flush it elsewhere. A store
+/// without observers snapshots an empty registry per write.
+pub trait StoreObserver: Send + Sync {
+    fn on_set(&self, locale: &str, key: &str, value: &str);
+    fn on_delete(&self, locale: &str, key: &str, old_value: &str);
+    fn on_delete_locale(&self, locale: &str);
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -32,11 +58,14 @@ pub struct KVEntry {
     pub value: String,
 }
 
+/// One page of entries plus the cursor that resumes the listing.
+pub type KVPage = Page<KVEntry, KVCursor>;
+
 #[derive(Debug, Clone, Serialize)]
-pub struct KVPage {
-    pub entries: Vec<KVEntry>,
-    /// `None` when this is the last page, otherwise the cursor for the next one.
-    pub next: Option<KVCursor>,
+pub struct KVStatistics {
+    pub locales: usize,
+    pub entries: usize,
+    pub per_locale: BTreeMap<String, usize>,
 }
 
 #[derive(Debug)]
@@ -69,4 +98,5 @@ pub enum ValueState {
     Deleted(String),
 }
 
+pub use mem::MemStore;
 pub use redb::RedbStore;

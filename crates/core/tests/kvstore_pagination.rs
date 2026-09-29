@@ -1,4 +1,4 @@
-use midlang_core::store::{KVCursor, KVEntry, KVStore, RedbStore, SortOrder, StoreError};
+use midlang_core::store::{KVCursor, KVEntry, KVRead, KVStore, RedbStore, SortOrder, StoreError};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -44,8 +44,8 @@ fn list_all(
     let mut all: Vec<KVEntry> = Vec::new();
     for _ in 0..SEEDED + 1 {
         let page = store.list("en", &cursor, limit).unwrap();
-        assert!(page.entries.len() <= limit);
-        all.extend(page.entries);
+        assert!(page.items.len() <= limit);
+        all.extend(page.items);
         match page.next {
             Some(next) => cursor = next,
             None => return all,
@@ -112,6 +112,24 @@ fn cursor_round_trips_through_a_token() {
     assert_eq!(decoded.order, SortOrder::Desc);
     assert_eq!(decoded.filter.as_deref(), Some("k1"));
     assert_eq!(decoded.next.as_deref(), Some("k17"));
+}
+
+#[test]
+fn statistics_counts_entries_per_locale() {
+    let (store, path) = seeded_store();
+
+    let stats = store.statistics().unwrap();
+    assert_eq!(stats.locales, 1);
+    assert_eq!(stats.entries, SEEDED);
+    assert_eq!(stats.per_locale.get("en"), Some(&SEEDED));
+
+    store.set("de", "hallo", "Hallo").unwrap();
+    let stats = store.statistics().unwrap();
+    assert_eq!(stats.locales, 2);
+    assert_eq!(stats.entries, SEEDED + 1);
+    assert_eq!(stats.per_locale.get("de"), Some(&1));
+
+    std::fs::remove_file(path).unwrap();
 }
 
 #[test]

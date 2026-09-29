@@ -62,6 +62,7 @@ pub async fn create_service() -> Result<()> {
         translation,
         auth,
         SocketAddr::new("127.0.0.1".parse().unwrap(), arg.port),
+        arg.cors_origin,
     );
     server.serve().await?;
     Ok(())

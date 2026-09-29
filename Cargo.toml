@@ -19,5 +19,6 @@ tokio-util = "0.7.19"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 tracing = "0.1.44"
+tower-http = { version = "0.6.8", features = ["cors"] }
 utoipa = { version = "5.4.0", features = ["axum_extras"] }
 uuid = "1.26.1"

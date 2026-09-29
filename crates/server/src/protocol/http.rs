@@ -6,6 +6,7 @@ pub mod store;
 pub mod translate;
 
 use anyhow::Result;
+use axum::http::HeaderValue;
 use axum::{
     Router,
     middleware::from_fn_with_state,
@@ -14,6 +15,7 @@ use axum::{
 };
 use midlang_core::{store::KVStore, translation::Translation};
 use tokio::net::TcpListener;
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
 use crate::secure::{self, AuthStore};
 
@@ -23,17 +25,24 @@ pub struct HttpServer<Store: KVStore> {
     translation: Translation<Store>,
     auth: AuthStore,
     addr: SocketAddr,
+    cors_origins: Vec<String>,
 }
 
 impl<Store> HttpServer<Store>
 where
     Store: KVStore + Clone + Send + Sync + 'static,
 {
-    pub fn new(translation: Translation<Store>, auth: AuthStore, addr: SocketAddr) -> Self {
+    pub fn new(
+        translation: Translation<Store>,
+        auth: AuthStore,
+        addr: SocketAddr,
+        cors_origins: Vec<String>,
+    ) -> Self {
         Self {
             translation,
             auth,
             addr,
+            cors_origins,
         }
     }
 
@@ -58,11 +67,29 @@ where
             )
             .layer(from_fn_with_state(self.auth.clone(), secure::middleware));
 
+        let cors = if self.cors_origins.is_empty() {
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any)
+        } else {
+            let origins = self
+                .cors_origins
+                .iter()
+                .map(HeaderValue::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::list(origins))
+                .allow_methods(Any)
+                .allow_headers(Any)
+        };
+
         let router = Router::new()
             .route("/health", any(health::health))
             .route("/openapi.json", get(openapi::handler))
             .merge(protected)
-            .with_state(self.translation.clone());
+            .with_state(self.translation.clone())
+            .layer(cors);
 
         let listener = TcpListener::bind(self.addr).await?;
         serve(listener, router).await?;

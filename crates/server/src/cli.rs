@@ -7,6 +7,10 @@ pub struct Args {
     /// The address to bind the server to.
     #[arg(short, long, default_value_t = 4321)]
     pub port: u16,
+    /// Allowed CORS origins. Repeat the option or separate origins with commas.
+    /// If omitted, all origins are allowed for local development.
+    #[arg(long, value_delimiter = ',')]
+    pub cors_origin: Vec<String>,
     /// The store type to use for the translation store.
     #[arg(default_value_t = StoreType::default(), value_parser = ValueParser::from(StoreType::from_str), long)]
     pub store: StoreType,

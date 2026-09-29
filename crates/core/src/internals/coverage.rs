@@ -4,7 +4,7 @@ use std::fmt::Display;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::Result;
 use sqlx::{Pool, QueryBuilder, Sqlite, Transaction};
 
 use crate::coverage::{CoverageReport, LocaleCoverage};
@@ -12,42 +12,22 @@ use crate::internals::worker::{WorkState, Workable};
 use crate::query::Page;
 use crate::store::{KVCursor, KVRead, SortOrder, StoreObserver};
 
-/// Entries read per page while priming from the store.
 const ENTRIES_PER_PAGE: usize = 1024;
-/// Rows per statement while priming; keeps the bind count well under SQLite's
-/// variable limit.
-const PRIME_BATCH: usize = 256;
-/// One bit per locale lives in a signed 64-bit mask, and the sign bit is left
-/// alone so masks stay positive.
-const MAX_LOCALES: i64 = 63;
+const INSERT_BATCH: usize = 256;
 
-/// How one write changes the coverage state.
 enum Delta {
-    /// `translated` is the state after the write, not the value itself.
     Entry {
         locale: String,
         key: String,
         translated: bool,
     },
-    /// Every key of the locale lost its translation.
-    Locale { locale: String },
-}
-
-impl Delta {
-    fn locale(&self) -> &str {
-        match self {
-            Delta::Entry { locale, .. } | Delta::Locale { locale } => locale,
-        }
-    }
+    Locale {
+        locale: String,
+    },
 }
 
 #[derive(Debug)]
 pub enum CoverageError {
-    /// One bit per locale is kept in a signed 64-bit mask, so at most
-    /// [`MAX_LOCALES`] locales can be tracked.
-    TooManyLocales(i64),
-    /// The maintained state disagrees with the store; the report would be
-    /// silently wrong, so it is refused instead.
     Inconsistent {
         present: usize,
         reference_keys: usize,
@@ -57,12 +37,6 @@ pub enum CoverageError {
 impl Display for CoverageError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CoverageError::TooManyLocales(id) => {
-                write!(
-                    f,
-                    "coverage tracks at most {MAX_LOCALES} locales, got id {id}"
-                )
-            }
             CoverageError::Inconsistent {
                 present,
                 reference_keys,
@@ -76,19 +50,12 @@ impl Display for CoverageError {
 
 impl Error for CoverageError {}
 
-/// Keeps per-key translation state in SQLite so that coverage can be answered
-/// with indexed queries instead of a full scan, and so that the state survives
-/// a restart.
-///
-/// One row per key holds a bitmask of the locales that translate it with a
-/// non-empty value; the locale table maps a locale to its bit. Writes are
-/// queued by the store's synchronous notifications and applied in one
-/// transaction by [`CoverageReporter::flush`], which the workplace calls on its
-/// tick and every read calls first, so a read never sees a half-applied batch.
+/// Maintains translation coverage in three normalized tables:
+/// text is stored once in the key/locale dictionaries, while each translation
+/// row contains only two integer IDs.
 pub struct CoverageReporter {
     pool: Pool<Sqlite>,
     pending: Mutex<Vec<Delta>>,
-    /// Bumped whenever committed state changes; the report cache key.
     generation: AtomicU64,
     reports: RwLock<HashMap<String, (u64, Arc<CoverageReport>)>>,
 }
@@ -106,80 +73,81 @@ impl CoverageReporter {
     }
 
     async fn ensure_tables(&self) -> Result<()> {
+        crate::internals::schema::ensure_tables(&self.pool).await?;
         sqlx::query(
             "
-        CREATE TABLE IF NOT EXISTS midlang_coverage_locales (
-            id     INTEGER PRIMARY KEY AUTOINCREMENT,
-            locale TEXT NOT NULL UNIQUE
+            CREATE TABLE IF NOT EXISTS midlang_coverage_keys (
+                id  INTEGER PRIMARY KEY,
+                key TEXT NOT NULL UNIQUE
+            )
+            ",
         )
-        ",
-        )
-        .execute(&mut *self.pool.acquire().await?)
+        .execute(&self.pool)
         .await?;
-
         sqlx::query(
             "
-        CREATE TABLE IF NOT EXISTS midlang_coverage_keys (
-            key  TEXT PRIMARY KEY NOT NULL,
-            mask INTEGER NOT NULL
-        ) WITHOUT ROWID
-        ",
+            CREATE TABLE IF NOT EXISTS midlang_coverage_translations (
+                key_id    INTEGER NOT NULL,
+                locale_id INTEGER NOT NULL,
+                PRIMARY KEY (key_id, locale_id)
+            ) WITHOUT ROWID
+            ",
         )
-        .execute(&mut *self.pool.acquire().await?)
+        .execute(&self.pool)
         .await?;
-
+        sqlx::query(
+            "
+            CREATE INDEX IF NOT EXISTS midlang_coverage_translations_locale_key
+            ON midlang_coverage_translations (locale_id, key_id)
+            ",
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    /// Rebuilds the whole table from `store`.
-    ///
-    /// Called at startup: the notifications only describe writes made while the
-    /// process runs, so state left over from a previous run has to be replaced
-    /// rather than trusted. Cost is one scan of the store.
     pub async fn resync<S>(&self, store: &S) -> Result<()>
     where
         S: KVRead + ?Sized,
     {
         self.flush().await?;
         let locales = store.statistics()?.per_locale;
-
         let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM midlang_coverage_translations")
+            .execute(&mut *tx)
+            .await?;
         sqlx::query("DELETE FROM midlang_coverage_keys")
             .execute(&mut *tx)
             .await?;
-        sqlx::query("DELETE FROM midlang_coverage_locales")
+        sqlx::query("DELETE FROM midlang_locales")
             .execute(&mut *tx)
             .await?;
 
         for locale in locales.keys() {
-            let id = upsert_locale(&mut tx, locale).await?;
-            let bit = bit_of(id)?;
-            let mut primed: Vec<(String, i64)> = Vec::new();
+            let locale_id = upsert_locale(&mut tx, locale).await?;
+            let mut keys = Vec::new();
             let mut cursor = KVCursor::new(SortOrder::Asc, None);
-
             loop {
                 let page = store.list(locale, &cursor, ENTRIES_PER_PAGE)?;
-                for entry in page.items {
-                    if !entry.value.is_empty() {
-                        primed.push((entry.key, bit));
-                    }
-                }
+                keys.extend(
+                    page.items
+                        .into_iter()
+                        .filter(|entry| !entry.value.is_empty())
+                        .map(|entry| entry.key),
+                );
                 match page.next {
                     Some(next) => cursor = next,
                     None => break,
                 }
             }
-
-            insert_keys(&mut tx, &primed).await?;
+            insert_keys(&mut tx, locale_id, &keys).await?;
         }
-        tx.commit().await?;
 
+        tx.commit().await?;
         self.generation.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
 
-    /// Applies every queued change in one transaction. Returns immediately when
-    /// nothing is queued, which is what makes it safe to call before a read.
     pub async fn flush(&self) -> Result<()> {
         let deltas = {
             let mut pending = self
@@ -192,8 +160,7 @@ impl CoverageReporter {
             std::mem::take(&mut *pending)
         };
 
-        let result = self.apply_deltas(&deltas).await;
-        if let Err(err) = result {
+        if let Err(err) = self.apply_deltas(&deltas).await {
             let mut pending = self
                 .pending
                 .lock()
@@ -203,100 +170,110 @@ impl CoverageReporter {
             *pending = retry;
             return Err(err);
         }
-
         Ok(())
     }
 
     async fn apply_deltas(&self, deltas: &[Delta]) -> Result<()> {
         let mut tx = self.pool.begin().await?;
-        let mut ids: HashMap<String, i64> = HashMap::new();
-        for locale in distinct_locales(deltas) {
-            ids.insert(locale.to_string(), upsert_locale(&mut tx, locale).await?);
-        }
+        let mut locales = HashMap::new();
+        let mut keys = HashMap::new();
 
         for delta in deltas {
-            let bit = bit_of(locale_id(&ids, delta.locale())?)?;
             match delta {
                 Delta::Entry {
-                    key, translated, ..
-                } if *translated => {
-                    insert_keys(&mut tx, &[(key.clone(), bit)]).await?;
-                }
-                Delta::Entry { key, .. } => {
-                    sqlx::query("UPDATE midlang_coverage_keys SET mask = mask & ? WHERE key = ?")
-                        .bind(!bit)
-                        .bind(key)
-                        .execute(&mut *tx)
-                        .await?;
-                    sqlx::query("DELETE FROM midlang_coverage_keys WHERE key = ? AND mask = 0")
-                        .bind(key)
-                        .execute(&mut *tx)
-                        .await?;
-                }
-                Delta::Locale { .. } => {
+                    locale,
+                    key,
+                    translated: true,
+                } => {
+                    let locale_id = match locales.get(locale) {
+                        Some(id) => *id,
+                        None => {
+                            let id = upsert_locale(&mut tx, locale).await?;
+                            locales.insert(locale.clone(), id);
+                            id
+                        }
+                    };
+                    let key_id = match keys.get(key) {
+                        Some(id) => *id,
+                        None => {
+                            let id = upsert_key(&mut tx, key).await?;
+                            keys.insert(key.clone(), id);
+                            id
+                        }
+                    };
                     sqlx::query(
-                        "UPDATE midlang_coverage_keys SET mask = mask & ? WHERE (mask & ?) != 0",
+                        "INSERT OR IGNORE INTO midlang_coverage_translations (key_id, locale_id)
+                         VALUES (?, ?)",
                     )
-                    .bind(!bit)
-                    .bind(bit)
+                    .bind(key_id)
+                    .bind(locale_id)
                     .execute(&mut *tx)
                     .await?;
-                    sqlx::query("DELETE FROM midlang_coverage_keys WHERE mask = 0")
+                }
+                Delta::Entry { locale, key, .. } => {
+                    let locale_id = find_locale(&mut *tx, locale).await?;
+                    let key_id = find_key(&mut *tx, key).await?;
+                    if let (Some(locale_id), Some(key_id)) = (locale_id, key_id) {
+                        sqlx::query(
+                            "DELETE FROM midlang_coverage_translations
+                             WHERE key_id = ? AND locale_id = ?",
+                        )
+                        .bind(key_id)
+                        .bind(locale_id)
                         .execute(&mut *tx)
                         .await?;
+                    }
                 }
-            }
-        }
-        for locale in distinct_locales(deltas) {
-            if last_delta_is_locale_delete(deltas, locale) {
-                sqlx::query("DELETE FROM midlang_coverage_locales WHERE locale = ?")
-                    .bind(locale)
-                    .execute(&mut *tx)
-                    .await?;
+                Delta::Locale { locale } => {
+                    if let Some(locale_id) = find_locale(&mut *tx, locale).await? {
+                        sqlx::query(
+                            "DELETE FROM midlang_coverage_translations WHERE locale_id = ?",
+                        )
+                        .bind(locale_id)
+                        .execute(&mut *tx)
+                        .await?;
+                        sqlx::query("DELETE FROM midlang_locales WHERE id = ?")
+                            .bind(locale_id)
+                            .execute(&mut *tx)
+                            .await?;
+                    }
+                }
             }
         }
         tx.commit().await?;
-
         Ok(())
     }
 
-    /// Coverage of `reference` for every locale the store has.
-    ///
-    /// Flushes first, so the answer includes writes that have not reached the
-    /// workplace tick yet.
     pub async fn report<S>(&self, store: &S, reference: &str) -> Result<Arc<CoverageReport>>
     where
         S: KVRead + ?Sized,
     {
         self.flush().await?;
         let generation = self.generation.load(Ordering::Acquire);
-        let cached = self
+        if let Some((cached_generation, report)) = self
             .reports
             .read()
             .expect("coverage report cache poisoned")
             .get(reference)
-            .cloned();
-        if let Some((cached_generation, report)) = cached
+            .cloned()
             && cached_generation == generation
         {
             return Ok(report);
         }
 
         let locales = store.statistics()?.per_locale;
-        if !locales.contains_key(reference) {
-            return Err(crate::store::StoreError::LocaleNotExist(reference.to_string()).into());
-        }
+        let reference_id = find_locale(&self.pool, reference)
+            .await?
+            .ok_or_else(|| crate::store::StoreError::LocaleNotExist(reference.to_string()))?;
+        let reference_keys = self.count_keys(reference_id).await?;
 
-        let reference_bit = self.bit_of_locale(reference).await?.unwrap_or(0);
-        let reference_keys = self.count_keys(reference_bit).await?;
-
-        let mut per_locale: BTreeMap<String, LocaleCoverage> = BTreeMap::new();
-        let mut present_total = 0usize;
+        let mut per_locale = BTreeMap::new();
+        let mut present_total = 0;
         for locale in locales.keys().filter(|locale| locale.as_str() != reference) {
-            let bit = self.bit_of_locale(locale).await?.unwrap_or(0);
-            // A key is translated by both locales when its mask holds the union
-            // of their bits; intersecting the bits themselves is always empty.
-            let present = self.count_keys(reference_bit | bit).await?;
+            let present = match find_locale(&self.pool, locale).await? {
+                Some(locale_id) => self.count_pair(reference_id, locale_id).await?,
+                None => 0,
+            };
             let missing =
                 reference_keys
                     .checked_sub(present)
@@ -304,7 +281,6 @@ impl CoverageReporter {
                         present,
                         reference_keys,
                     })?;
-
             present_total += present;
             per_locale.insert(
                 locale.clone(),
@@ -326,12 +302,9 @@ impl CoverageReporter {
             .write()
             .expect("coverage report cache poisoned")
             .insert(reference.to_string(), (generation, report.clone()));
-
         Ok(report)
     }
 
-    /// One page of the reference keys `locale` does not translate, in ascending
-    /// key order and resuming after `cursor`.
     pub async fn missing_keys(
         &self,
         reference: &str,
@@ -340,30 +313,52 @@ impl CoverageReporter {
         limit: usize,
     ) -> Result<Page<String, String>> {
         self.flush().await?;
-        let reference_bit = self
-            .bit_of_locale(reference)
+        let reference_id = find_locale(&self.pool, reference)
             .await?
             .ok_or_else(|| crate::store::StoreError::LocaleNotExist(reference.to_string()))?;
-        let locale_bit = self.bit_of_locale(locale).await?.unwrap_or(0);
+        let locale_id = find_locale(&self.pool, locale).await?;
 
-        // One row past the page tells whether a next page exists.
-        let mut rows: Vec<String> = sqlx::query_scalar(
-            "
-            SELECT key FROM midlang_coverage_keys
-             WHERE (mask & ?) != 0
-               AND (mask & ?) = 0
-               AND (? IS NULL OR key > ?)
-             ORDER BY key
-             LIMIT ?
-            ",
-        )
-        .bind(reference_bit)
-        .bind(locale_bit)
-        .bind(cursor)
-        .bind(cursor)
-        .bind(limit as i64 + 1)
-        .fetch_all(&self.pool)
-        .await?;
+        let mut rows = if let Some(locale_id) = locale_id {
+            sqlx::query_scalar(
+                "
+                SELECT keys.key
+                  FROM midlang_coverage_translations AS reference
+                  JOIN midlang_coverage_keys AS keys ON keys.id = reference.key_id
+                  LEFT JOIN midlang_coverage_translations AS translated
+                    ON translated.key_id = reference.key_id AND translated.locale_id = ?
+                 WHERE reference.locale_id = ?
+                   AND translated.key_id IS NULL
+                   AND (? IS NULL OR keys.key > ?)
+                 ORDER BY keys.key
+                 LIMIT ?
+                ",
+            )
+            .bind(locale_id)
+            .bind(reference_id)
+            .bind(cursor)
+            .bind(cursor)
+            .bind(limit as i64 + 1)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_scalar(
+                "
+                SELECT keys.key
+                  FROM midlang_coverage_translations AS reference
+                  JOIN midlang_coverage_keys AS keys ON keys.id = reference.key_id
+                 WHERE reference.locale_id = ?
+                   AND (? IS NULL OR keys.key > ?)
+                 ORDER BY keys.key
+                 LIMIT ?
+                ",
+            )
+            .bind(reference_id)
+            .bind(cursor)
+            .bind(cursor)
+            .bind(limit as i64 + 1)
+            .fetch_all(&self.pool)
+            .await?
+        };
 
         let next = if rows.len() > limit {
             rows.truncate(limit);
@@ -371,34 +366,34 @@ impl CoverageReporter {
         } else {
             None
         };
-
         Ok(Page { items: rows, next })
     }
 
-    async fn bit_of_locale(&self, locale: &str) -> Result<Option<i64>> {
-        let id: Option<i64> =
-            sqlx::query_scalar("SELECT id FROM midlang_coverage_locales WHERE locale = ?")
-                .bind(locale)
-                .fetch_optional(&self.pool)
-                .await?;
-        match id {
-            Some(id) => Ok(Some(bit_of(id)?)),
-            None => Ok(None),
-        }
-    }
-
-    /// Rows whose mask contains every bit of `mask`. `mask == 0` counts nothing
-    /// rather than everything, so an unknown locale measures 0%.
-    async fn count_keys(&self, mask: i64) -> Result<usize> {
+    async fn count_keys(&self, locale_id: i64) -> Result<usize> {
         let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM midlang_coverage_keys WHERE (? != 0 AND (mask & ?) = ?)",
+            "SELECT COUNT(*) FROM midlang_coverage_translations WHERE locale_id = ?",
         )
-        .bind(mask)
-        .bind(mask)
-        .bind(mask)
+        .bind(locale_id)
         .fetch_one(&self.pool)
         .await?;
-        usize::try_from(count).map_err(|_| anyhow!("coverage counted {count} keys"))
+        Ok(count as usize)
+    }
+
+    async fn count_pair(&self, reference_id: i64, locale_id: i64) -> Result<usize> {
+        let count: i64 = sqlx::query_scalar(
+            "
+            SELECT COUNT(*)
+              FROM midlang_coverage_translations AS reference
+              JOIN midlang_coverage_translations AS translated
+                ON translated.key_id = reference.key_id
+             WHERE reference.locale_id = ? AND translated.locale_id = ?
+            ",
+        )
+        .bind(reference_id)
+        .bind(locale_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(count as usize)
     }
 
     fn queue(&self, delta: Delta) {
@@ -420,7 +415,6 @@ impl StoreObserver for CoverageReporter {
     }
 
     fn on_delete(&self, locale: &str, key: &str, old_value: &str) {
-        // A key that was never translated has nothing to clear.
         if old_value.is_empty() {
             return;
         }
@@ -446,70 +440,69 @@ impl Workable for CoverageReporter {
     }
 }
 
-fn distinct_locales(deltas: &[Delta]) -> Vec<&str> {
-    let mut locales: Vec<&str> = deltas.iter().map(Delta::locale).collect();
-    locales.sort_unstable();
-    locales.dedup();
-    locales
+async fn find_locale<'e, E>(executor: E, locale: &str) -> Result<Option<i64>>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
+    Ok(
+        sqlx::query_scalar("SELECT id FROM midlang_locales WHERE locale = ?")
+            .bind(locale)
+            .fetch_optional(executor)
+            .await?,
+    )
 }
 
-fn locale_id(ids: &HashMap<String, i64>, locale: &str) -> Result<i64> {
-    ids.get(locale)
-        .copied()
-        .ok_or_else(|| anyhow!("coverage lost the id of locale '{locale}'"))
+async fn find_key<'e, E>(executor: E, key: &str) -> Result<Option<i64>>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
+    Ok(
+        sqlx::query_scalar("SELECT id FROM midlang_coverage_keys WHERE key = ?")
+            .bind(key)
+            .fetch_optional(executor)
+            .await?,
+    )
 }
 
 async fn upsert_locale(tx: &mut Transaction<'_, Sqlite>, locale: &str) -> Result<i64> {
-    let existing: Option<i64> =
-        sqlx::query_scalar("SELECT id FROM midlang_coverage_locales WHERE locale = ?")
-            .bind(locale)
-            .fetch_optional(&mut **tx)
-            .await?;
-    if let Some(id) = existing {
-        return Ok(id);
-    }
-
-    let used: Vec<i64> = sqlx::query_scalar("SELECT id FROM midlang_coverage_locales")
-        .fetch_all(&mut **tx)
-        .await?;
-    let id = (1..=MAX_LOCALES)
-        .find(|id| !used.contains(id))
-        .ok_or(CoverageError::TooManyLocales(MAX_LOCALES + 1))?;
-    sqlx::query("INSERT INTO midlang_coverage_locales (id, locale) VALUES (?, ?)")
-        .bind(id)
+    sqlx::query("INSERT OR IGNORE INTO midlang_locales (locale) VALUES (?)")
         .bind(locale)
         .execute(&mut **tx)
         .await?;
-    Ok(id)
+    Ok(find_locale(&mut **tx, locale)
+        .await?
+        .expect("locale inserted but not found"))
 }
 
-fn last_delta_is_locale_delete(deltas: &[Delta], locale: &str) -> bool {
-    deltas
-        .iter()
-        .rev()
-        .find(|delta| delta.locale() == locale)
-        .is_some_and(|delta| matches!(delta, Delta::Locale { .. }))
+async fn upsert_key(tx: &mut Transaction<'_, Sqlite>, key: &str) -> Result<i64> {
+    sqlx::query("INSERT OR IGNORE INTO midlang_coverage_keys (key) VALUES (?)")
+        .bind(key)
+        .execute(&mut **tx)
+        .await?;
+    Ok(find_key(&mut **tx, key)
+        .await?
+        .expect("key inserted but not found"))
 }
 
-/// Sets the given bits, or-ing them into what a key already has.
-async fn insert_keys(tx: &mut Transaction<'_, Sqlite>, keys: &[(String, i64)]) -> Result<()> {
-    for batch in keys.chunks(PRIME_BATCH) {
-        let mut builder: QueryBuilder<Sqlite> =
-            QueryBuilder::new("INSERT INTO midlang_coverage_keys (key, mask) ");
-        builder.push_values(batch, |mut row, (key, bit)| {
-            row.push_bind(key.as_str()).push_bind(*bit);
+async fn insert_keys(
+    tx: &mut Transaction<'_, Sqlite>,
+    locale_id: i64,
+    keys: &[String],
+) -> Result<()> {
+    let mut pairs = Vec::with_capacity(keys.len());
+    for key in keys {
+        pairs.push((upsert_key(tx, key).await?, locale_id));
+    }
+    for batch in pairs.chunks(INSERT_BATCH) {
+        let mut builder = QueryBuilder::new(
+            "INSERT OR IGNORE INTO midlang_coverage_translations (key_id, locale_id) ",
+        );
+        builder.push_values(batch, |mut row, (key_id, locale_id)| {
+            row.push_bind(*key_id).push_bind(*locale_id);
         });
-        builder.push(" ON CONFLICT (key) DO UPDATE SET mask = mask | excluded.mask");
         builder.build().execute(&mut **tx).await?;
     }
     Ok(())
-}
-
-fn bit_of(id: i64) -> Result<i64> {
-    if !(1..=MAX_LOCALES).contains(&id) {
-        bail!(CoverageError::TooManyLocales(id));
-    }
-    Ok(1i64 << (id - 1))
 }
 
 fn ratio(present: usize, reference_keys: usize) -> f64 {

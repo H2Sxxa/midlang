@@ -141,6 +141,40 @@ async fn reporter_matches_the_streaming_report_after_random_writes() -> Result<(
     Ok(())
 }
 
+#[tokio::test]
+async fn reporter_supports_more_than_63_locales() -> Result<()> {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await?;
+    let reporter = Arc::new(CoverageReporter::new(pool).await?);
+
+    let mut internal = InternalService::default();
+    internal.coverage = Some(reporter.clone());
+
+    let store_path = temp_store_path();
+    let mut store = RedbStore::new(&store_path)?;
+    store.attach_observer(Arc::new(internal) as Arc<dyn StoreObserver>);
+
+    store.set(REFERENCE, "shared", "source")?;
+    for index in 0..70 {
+        let locale = format!("locale-{index:02}");
+        store.set(&locale, "shared", "translated")?;
+    }
+
+    let report = reporter.report(&store, REFERENCE).await?;
+    assert_eq!(report.per_locale.len(), 70);
+    assert!(
+        report
+            .per_locale
+            .values()
+            .all(|coverage| coverage.present == 1)
+    );
+
+    std::fs::remove_file(store_path)?;
+    Ok(())
+}
+
 /// One store, one reporter and one deterministic write sequence.
 async fn run_scenario(seed: u64) -> Result<()> {
     // One connection, so the in-memory database is shared by every query.

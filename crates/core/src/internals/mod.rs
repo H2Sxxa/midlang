@@ -9,6 +9,7 @@ use crate::store::StoreObserver;
 pub mod changelog;
 pub mod coverage;
 pub mod issue;
+pub mod schema;
 pub mod worker;
 
 /// Owns every derived-state service and presents one
@@ -29,6 +30,7 @@ impl InternalService {
             Sqlite::create_database(url).await?;
         }
         let pool = SqlitePool::connect(url).await?;
+        schema::ensure_tables(&pool).await?;
 
         let mut internal = Self::default();
         if issue {

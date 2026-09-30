@@ -6,6 +6,10 @@ import { defineConfig } from "vite"
 
 // https://vite.dev/config/
 export default defineConfig({
+  // GitHub Pages serves the console from `/<repo>/webui/`; "/" keeps local dev
+  // and preview hosts working unchanged. `import.meta.env.BASE_URL` is derived
+  // from this value, and the router uses it as its basepath.
+  base: process.env.WEBUI_BASE ?? "/",
   plugins: [
     // Must run before react() so route generation and code splitting see the route files.
     tanstackRouter({

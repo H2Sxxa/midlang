@@ -1,0 +1,86 @@
+name: Deploy to GitHub Pages
+
+# Publishes both front ends to one Pages site:
+#   /<repo>/         docs    (VitePress)
+#   /<repo>/webui/   console (Vite SPA)
+#
+# Both builds read their base path from the environment, so the same commands
+# work for local previews (base defaults to "/") and for Pages.
+on:
+  push:
+    branches: [main]
+    paths:
+      - web/**
+  workflow_dispatch:
+
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deployment finish, but never queue more than one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            web/midlang-webui/pnpm-lock.yaml
+            web/midlang-docs/pnpm-lock.yaml
+
+      # Base paths must start and end with a slash. The repository name is used
+      # as-is, because that is how GitHub Pages spells the project site URL.
+      - name: Resolve base paths
+        run: |
+          echo "DOCS_BASE=/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_ENV"
+          echo "WEBUI_BASE=/${GITHUB_REPOSITORY#*/}/webui/" >> "$GITHUB_ENV"
+
+      - name: Build the console
+        working-directory: web/midlang-webui
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Build the docs
+        working-directory: web/midlang-docs
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      # One artifact: docs at the root, console under /webui/. The console has
+      # no 404 of its own; its routes are recovered by the docs' 404 page.
+      - name: Assemble the site
+        run: |
+          mkdir -p site/webui
+          cp -R web/midlang-docs/.vitepress/dist/. site/
+          cp -R web/midlang-webui/dist/. site/webui/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

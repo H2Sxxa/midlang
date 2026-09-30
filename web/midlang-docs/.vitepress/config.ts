@@ -69,6 +69,12 @@ export default defineConfig({
           items: [{ text: "Getting started", link: "/guide/getting-started" }],
         },
       ],
+      "/webui/": [
+        {
+          text: "WebUI",
+          items: [{ text: "Overview", link: "/webui/" }],
+        }
+      ]
     },
     search: {
       provider: "local",

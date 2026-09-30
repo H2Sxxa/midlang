@@ -54,6 +54,10 @@ where
         let protected = Router::new()
             .route("/store/statistics", get(store::statistics_handler::<Store>))
             .route(
+                "/t/{locale}",
+                get(translate::list_translation_handler::<Store>),
+            )
+            .route(
                 "/t/{locale}/{key}",
                 get(translate::translate_handler::<Store>)
                     .put(translate::set_translation_handler::<Store>)

@@ -156,7 +156,7 @@ function LoginPage() {
                 name="remoteUrl"
                 autoComplete="off"
                 spellCheck={false}
-                placeholder="http://localhost:8080"
+                placeholder="http://localhost:4321"
                 value={remoteUrl}
                 aria-invalid={formErrors.remoteUrl !== undefined}
                 onChange={(event) => setRemoteUrl(event.target.value)}

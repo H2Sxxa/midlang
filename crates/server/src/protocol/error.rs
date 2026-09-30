@@ -26,6 +26,18 @@ pub fn not_found(message: String) -> Response {
         .into_response()
 }
 
+/// Maps malformed request parameters to a stable client error.
+pub fn bad_request(message: impl Into<String>) -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ErrorBody {
+            code: "bad_request",
+            message: message.into(),
+        }),
+    )
+        .into_response()
+}
+
 /// Maps a store failure to a distinct response: a missing locale or key is a
 /// `404`, everything else is a `500` logged with its full error chain.
 pub fn store(err: Error) -> Response {

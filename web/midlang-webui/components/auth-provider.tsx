@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { defaultRemoteUrl } from "@/hooks/config"
 import { AuthContext, type AuthStatus } from "@/hooks/use-auth"
-import { clearSession, readSession, writeSession } from "@/lib/session"
 
 type AuthState = {
   readonly status: AuthStatus
@@ -14,13 +13,7 @@ type AuthProviderProps = {
 }
 
 function createInitialState(): AuthState {
-  const session = readSession()
-
-  if (session === null) {
-    return { status: "unauthenticated", token: null, remoteUrl: defaultRemoteUrl }
-  }
-
-  return { status: "authenticated", token: session.token, remoteUrl: session.remoteUrl }
+  return { status: "unauthenticated", token: null, remoteUrl: defaultRemoteUrl }
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
@@ -32,7 +25,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       // TODO: verify the token against remoteUrl before trusting it, once the server
       // exposes an authentication endpoint.
-      writeSession({ token, remoteUrl })
       setState({ status: "authenticated", token, remoteUrl })
     } catch (error) {
       setState((current) => ({ ...current, status: "error" }))
@@ -41,7 +33,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   const logout = (): void => {
-    clearSession()
     setState((current) => ({
       status: "unauthenticated",
       token: null,

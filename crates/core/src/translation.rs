@@ -4,7 +4,7 @@ use crate::{
         changelog::{ChangeState, Changelog},
         issue::IssueEvent,
     },
-    store::{KVRead, KVStore, StoreError, ValueState},
+    store::{KVCursor, KVPage, KVRead, KVStore, StoreError, ValueState},
 };
 
 use anyhow::Result;
@@ -64,6 +64,13 @@ where
 
     pub fn statistics(&self) -> Result<crate::store::KVStatistics> {
         self.store.statistics()
+    }
+
+    /// Lists the entries for a locale using the store's keyset pagination and
+    /// filter semantics. Listing is a pure read and deliberately does not
+    /// report missing keys as issues.
+    pub fn list(&self, locale: &str, cursor: &KVCursor, limit: usize) -> Result<KVPage> {
+        self.store.list(locale, cursor, limit)
     }
 }
 

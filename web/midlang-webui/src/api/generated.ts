@@ -37,6 +37,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/t/{locale}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_translation_handler"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/t/{locale}/{key}": {
         parameters: {
             query?: never;
@@ -86,6 +102,15 @@ export interface components {
             per_locale: {
                 [key: string]: number;
             };
+        };
+        TranslationListEntry: {
+            key: string;
+            value: string;
+        };
+        TranslationListPage: {
+            items: components["schemas"]["TranslationListEntry"][];
+            /** @description URL-safe cursor token for the next page, if one exists. */
+            next?: string | null;
         };
         TranslationMessage: {
             key: string;
@@ -159,6 +184,74 @@ export interface operations {
             };
             /** @description Store statistics unavailable */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_translation_handler: {
+        parameters: {
+            query?: {
+                /** @description Case-insensitive substring matched against keys and values. */
+                keyword?: string;
+                /** @description Number of entries to return. Defaults to 100. */
+                limit?: number;
+                /** @description Cursor returned by the previous page. */
+                cursor?: string;
+                /** @description Sort direction for the first page. A cursor carries its own direction. */
+                order?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Locale identifier */
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged translations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationListPage"];
+                };
+            };
+            /** @description Invalid query or cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Missing or invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Locale not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

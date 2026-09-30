@@ -13,6 +13,9 @@ import { Route as AppRouteImport } from "./routes/_app"
 import { Route as AppIndexRouteImport } from "./routes/_app/index"
 import { Route as AppSettingsRouteImport } from "./routes/_app/settings"
 import { Route as LoginIndexRouteImport } from "./routes/login/index"
+import { Route as AppTranslationsIndexRouteImport } from "./routes/_app/translations/index"
+import { Route as AppTranslationsNewRouteImport } from "./routes/_app/translations/new"
+import { Route as AppTranslationsLocaleKeyRouteImport } from "./routes/_app/translations/$locale/$key"
 
 const AppRoute = AppRouteImport.update({
   id: "/_app",
@@ -33,16 +36,38 @@ const LoginIndexRoute = LoginIndexRouteImport.update({
   path: "/login/",
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppTranslationsIndexRoute = AppTranslationsIndexRouteImport.update({
+  id: "/translations/",
+  path: "/translations/",
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTranslationsNewRoute = AppTranslationsNewRouteImport.update({
+  id: "/translations/new",
+  path: "/translations/new",
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTranslationsLocaleKeyRoute =
+  AppTranslationsLocaleKeyRouteImport.update({
+    id: "/translations/$locale/$key",
+    path: "/translations/$locale/$key",
+    getParentRoute: () => AppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   "/": typeof AppIndexRoute
   "/settings": typeof AppSettingsRoute
   "/login/": typeof LoginIndexRoute
+  "/translations/new": typeof AppTranslationsNewRoute
+  "/translations/": typeof AppTranslationsIndexRoute
+  "/translations/$locale/$key": typeof AppTranslationsLocaleKeyRoute
 }
 export interface FileRoutesByTo {
   "/settings": typeof AppSettingsRoute
   "/": typeof AppIndexRoute
   "/login": typeof LoginIndexRoute
+  "/translations/new": typeof AppTranslationsNewRoute
+  "/translations": typeof AppTranslationsIndexRoute
+  "/translations/$locale/$key": typeof AppTranslationsLocaleKeyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -50,13 +75,36 @@ export interface FileRoutesById {
   "/_app/settings": typeof AppSettingsRoute
   "/_app/": typeof AppIndexRoute
   "/login/": typeof LoginIndexRoute
+  "/_app/translations/new": typeof AppTranslationsNewRoute
+  "/_app/translations/": typeof AppTranslationsIndexRoute
+  "/_app/translations/$locale/$key": typeof AppTranslationsLocaleKeyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: "/" | "/settings" | "/login/"
+  fullPaths:
+    | "/"
+    | "/settings"
+    | "/login/"
+    | "/translations/new"
+    | "/translations/"
+    | "/translations/$locale/$key"
   fileRoutesByTo: FileRoutesByTo
-  to: "/settings" | "/" | "/login"
-  id: "__root__" | "/_app" | "/_app/settings" | "/_app/" | "/login/"
+  to:
+    | "/settings"
+    | "/"
+    | "/login"
+    | "/translations/new"
+    | "/translations"
+    | "/translations/$locale/$key"
+  id:
+    | "__root__"
+    | "/_app"
+    | "/_app/settings"
+    | "/_app/"
+    | "/login/"
+    | "/_app/translations/new"
+    | "/_app/translations/"
+    | "/_app/translations/$locale/$key"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -94,17 +142,44 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof LoginIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/_app/translations/": {
+      id: "/_app/translations/"
+      path: "/translations"
+      fullPath: "/translations/"
+      preLoaderRoute: typeof AppTranslationsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    "/_app/translations/new": {
+      id: "/_app/translations/new"
+      path: "/translations/new"
+      fullPath: "/translations/new"
+      preLoaderRoute: typeof AppTranslationsNewRouteImport
+      parentRoute: typeof AppRoute
+    }
+    "/_app/translations/$locale/$key": {
+      id: "/_app/translations/$locale/$key"
+      path: "/translations/$locale/$key"
+      fullPath: "/translations/$locale/$key"
+      preLoaderRoute: typeof AppTranslationsLocaleKeyRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
   AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppTranslationsNewRoute: typeof AppTranslationsNewRoute
+  AppTranslationsIndexRoute: typeof AppTranslationsIndexRoute
+  AppTranslationsLocaleKeyRoute: typeof AppTranslationsLocaleKeyRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,
+  AppTranslationsNewRoute: AppTranslationsNewRoute,
+  AppTranslationsIndexRoute: AppTranslationsIndexRoute,
+  AppTranslationsLocaleKeyRoute: AppTranslationsLocaleKeyRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

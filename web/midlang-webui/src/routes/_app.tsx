@@ -19,7 +19,10 @@ export const Route = createFileRoute("/_app")({
 
 function AppLayout() {
   const pathname = useLocation({ select: (location) => location.pathname })
-  const title = navItems.find((item) => item.to === pathname)?.label ?? APP_TITLE
+  const title = [...navItems]
+    .sort((left, right) => String(right.to).length - String(left.to).length)
+    .find((item) => pathname.startsWith(typeof item.to === "string" ? item.to : ""))
+    ?.label ?? APP_TITLE
 
   return (
     <SidebarProvider>

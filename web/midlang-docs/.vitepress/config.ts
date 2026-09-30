@@ -10,11 +10,15 @@ function normalizeBase(rawBase: string): string {
   return trimmed === "" ? "/" : `/${trimmed}/`
 }
 
+
 /** GitHub Pages serves the docs from `/<repo>/`; "/" keeps local dev unchanged. */
 const docsBase = normalizeBase(process.env.DOCS_BASE ?? "/")
 
 /** Sub-path of the console, e.g. `/<repo>/webui/`. Unset outside Pages builds. */
 const webuiBase = process.env.WEBUI_BASE
+
+/** Full URL makes VitePress leave the console link to the browser. */
+const webuiUrl = process.env.WEBUI_URL ?? "/webui/"
 
 /**
  * GitHub Pages answers every missing path with the single 404 page at the site
@@ -61,7 +65,10 @@ export default defineConfig({
     return code.replace("<head>", `<head>${webuiFallbackScript}`)
   },
   themeConfig: {
-    nav: [{ text: "Guide", link: "/guide/getting-started" }],
+    nav: [
+      { text: "Guide", link: "/guide/getting-started" },
+      { text: "WebUI", link: webuiUrl },
+    ],
     sidebar: {
       "/guide/": [
         {
@@ -69,12 +76,6 @@ export default defineConfig({
           items: [{ text: "Getting started", link: "/guide/getting-started" }],
         },
       ],
-      "/webui/": [
-        {
-          text: "WebUI",
-          items: [{ text: "Overview", link: "/webui/" }],
-        }
-      ]
     },
     search: {
       provider: "local",

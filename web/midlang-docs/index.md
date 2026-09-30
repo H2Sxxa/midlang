@@ -11,7 +11,7 @@ hero:
       link: /guide/getting-started
     - theme: alt
       text: Try WebUI
-      link: /webui/
+      link: https://h2sxxa.github.io/midlang/webui/
     - theme: alt
       text: How it works
       link: /#how-it-works

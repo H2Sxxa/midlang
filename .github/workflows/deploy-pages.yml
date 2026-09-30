@@ -46,8 +46,10 @@ jobs:
       # as-is, because that is how GitHub Pages spells the project site URL.
       - name: Resolve base paths
         run: |
-          echo "DOCS_BASE=/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_ENV"
-          echo "WEBUI_BASE=/${GITHUB_REPOSITORY#*/}/webui/" >> "$GITHUB_ENV"
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          echo "DOCS_BASE=/${REPO_NAME}/" >> "$GITHUB_ENV"
+          echo "WEBUI_BASE=/${REPO_NAME}/webui/" >> "$GITHUB_ENV"
+          echo "WEBUI_URL=https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/webui/" >> "$GITHUB_ENV"
 
       - name: Build the console
         working-directory: web/midlang-webui

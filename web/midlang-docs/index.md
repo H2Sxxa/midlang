@@ -10,6 +10,9 @@ hero:
       text: Get started
       link: /guide/getting-started
     - theme: alt
+      text: WebUI
+      link: /webui
+    - theme: alt
       text: How it works
       link: /#how-it-works
 

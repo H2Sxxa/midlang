@@ -128,3 +128,12 @@
     @apply font-mono;
     }
 }
+
+/* Keeps native controls, scrollbars, and form widgets in step with the active theme. */
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}

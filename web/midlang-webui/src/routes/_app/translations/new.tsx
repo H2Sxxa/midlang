@@ -6,12 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useTranslation } from "@/hooks/use-translation"
+import { useAuth } from "@/hooks/use-auth"
 
 export const Route = createFileRoute("/_app/translations/new")({
   component: NewTranslationPage,
 })
 
 function NewTranslationPage() {
+  const auth = useAuth()
   const navigate = useNavigate()
   const [locale, setLocale] = useState("")
   const [key, setKey] = useState("")
@@ -41,11 +43,19 @@ function NewTranslationPage() {
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
-      <Button variant="ghost" render={<Link to="/translations" />}><ArrowLeftIcon /> Back to translations</Button>
+      <Button nativeButton={false} variant="ghost" render={<Link to="/translations" />}><ArrowLeftIcon /> Back to translations</Button>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Add translation</h1>
         <p className="mt-1 text-muted-foreground">Create a translation resource for a locale.</p>
       </div>
+      {!auth.can("translation:write") && (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-destructive">You do not have permission to create translations.</p>
+          </CardContent>
+        </Card>
+      )}
+      {auth.can("translation:write") && (
       <Card>
         <CardHeader>
           <CardTitle>Translation resource</CardTitle>
@@ -72,6 +82,7 @@ function NewTranslationPage() {
           </form>
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

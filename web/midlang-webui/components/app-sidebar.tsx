@@ -20,6 +20,12 @@ export function AppSidebar() {
   const matchRoute = useMatchRoute()
   const navigate = useNavigate()
   const auth = useAuth()
+  const visibleSections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.permission === undefined || auth.can(item.permission)),
+    }))
+    .filter((section) => section.items.length > 0)
 
   const handleSignOut = () => {
     auth.logout()
@@ -44,7 +50,7 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {navSections.map((section) => (
+        {visibleSections.map((section) => (
           <SidebarGroup key={section.label}>
             <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
             <SidebarGroupContent>

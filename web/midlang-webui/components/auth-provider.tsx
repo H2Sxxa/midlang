@@ -1,11 +1,14 @@
 import { useState, type ReactNode } from "react"
+import { createApiClient } from "@/api/client"
 import { defaultRemoteUrl } from "@/hooks/config"
-import { AuthContext, type AuthStatus } from "@/hooks/use-auth"
+import { useToast } from "@/hooks/use-toast"
+import { AuthContext, type AuthStatus, type Permission } from "@/hooks/use-auth"
 
 type AuthState = {
   readonly status: AuthStatus
   readonly token: string | null
   readonly remoteUrl: string
+  readonly permissions: ReadonlyArray<Permission>
 }
 
 type AuthProviderProps = {
@@ -13,21 +16,43 @@ type AuthProviderProps = {
 }
 
 function createInitialState(): AuthState {
-  return { status: "unauthenticated", token: null, remoteUrl: defaultRemoteUrl }
+  return {
+    status: "unauthenticated",
+    token: null,
+    remoteUrl: defaultRemoteUrl,
+    permissions: [],
+  }
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [state, setState] = useState<AuthState>(createInitialState)
+  const toast = useToast()
 
   const login = async (token: string, remoteUrl: string): Promise<void> => {
     setState((current) => ({ ...current, status: "authenticating" }))
 
     try {
-      // TODO: verify the token against remoteUrl before trusting it, once the server
-      // exposes an authentication endpoint.
-      setState({ status: "authenticated", token, remoteUrl })
+      const client = createApiClient(remoteUrl, token)
+      const result = await client.GET("/auth/permissions")
+      if (result.error !== undefined || result.data === undefined) {
+        const message = result.response.status === 401
+          ? "The API token is invalid or expired."
+          : "Unable to verify the API token."
+        throw new Error(message)
+      }
+
+      setState({
+        status: "authenticated",
+        token,
+        remoteUrl,
+        permissions: result.data.permissions,
+      })
     } catch (error) {
       setState((current) => ({ ...current, status: "error" }))
+      toast.error({
+        message: "Sign in failed",
+        description: error instanceof Error ? error.message : String(error),
+      })
       throw error
     }
   }
@@ -37,6 +62,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       status: "unauthenticated",
       token: null,
       remoteUrl: current.remoteUrl,
+      permissions: [],
     }))
   }
 
@@ -46,8 +72,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         status: state.status,
         token: state.token,
         remoteUrl: state.remoteUrl,
+        permissions: state.permissions,
         login,
         logout,
+        can: (permission) => state.permissions.includes(permission),
       }}
     >
       {children}

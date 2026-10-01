@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query"
 import type { components } from "@/api/generated"
 import { useClient } from "@/hooks/use-client"
+import { useToast } from "@/hooks/use-toast"
 
 export type TranslationListPage = components["schemas"]["TranslationListPage"]
 export type TranslationOrder = "asc" | "desc"
@@ -33,6 +34,7 @@ type DeleteTranslationInput = {
 export function useTranslation({ locale, keyword, order, key }: TranslationOptions) {
   const client = useClient()
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   const statisticsQuery = useQuery({
     queryKey: ["store-statistics", client],
@@ -41,6 +43,9 @@ export function useTranslation({ locale, keyword, order, key }: TranslationOptio
       if (client === null) throw new Error("API client is unavailable")
       const result = await client.GET("/store/statistics")
       if (result.error !== undefined || result.data === undefined) {
+        if (result.response.status === 401) {
+          toast.error({ message: "Authentication expired", description: "Please sign in again." })
+        }
         throw new Error("Unable to load locales.")
       }
       return result.data
@@ -75,6 +80,9 @@ export function useTranslation({ locale, keyword, order, key }: TranslationOptio
         },
       })
       if (result.error !== undefined || result.data === undefined) {
+        if (result.response.status === 401) {
+          toast.error({ message: "Authentication expired", description: "Please sign in again." })
+        }
         throw new Error("Unable to load translations.")
       }
       return result.data
@@ -90,6 +98,9 @@ export function useTranslation({ locale, keyword, order, key }: TranslationOptio
         params: { path: { locale: selectedLocale, key } },
       })
       if (result.error !== undefined || result.data === undefined) {
+        if (result.response.status === 401) {
+          toast.error({ message: "Authentication expired", description: "Please sign in again." })
+        }
         throw new Error("Unable to load translation.")
       }
       return result.data
@@ -103,7 +114,12 @@ export function useTranslation({ locale, keyword, order, key }: TranslationOptio
         params: { path: { locale, key } },
         body: { value },
       })
-      if (result.error !== undefined) throw new Error("Unable to save translation.")
+      if (result.error !== undefined) {
+        if (result.response.status === 401) {
+          toast.error({ message: "Authentication expired", description: "Please sign in again." })
+        }
+        throw new Error("Unable to save translation.")
+      }
       return result.data
     },
     onSuccess: async () => {
@@ -118,7 +134,12 @@ export function useTranslation({ locale, keyword, order, key }: TranslationOptio
       const result = await client.DELETE("/t/{locale}/{key}", {
         params: { path: { locale, key } },
       })
-      if (result.error !== undefined) throw new Error("Unable to delete translation.")
+      if (result.error !== undefined) {
+        if (result.response.status === 401) {
+          toast.error({ message: "Authentication expired", description: "Please sign in again." })
+        }
+        throw new Error("Unable to delete translation.")
+      }
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["translations"] })

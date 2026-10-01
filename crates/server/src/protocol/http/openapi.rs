@@ -11,6 +11,7 @@ use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
     ),
     paths(
         super::health::health,
+        super::permissions::permissions_handler,
         super::store::statistics_handler,
         super::translate::list_translation_handler,
         super::translate::translate_handler,
@@ -27,6 +28,7 @@ use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
             super::translate::TranslationListEntry,
             super::translate::TranslationListPage,
             super::store::StoreStatistics,
+            super::permissions::PermissionsResponse,
             crate::protocol::error::ErrorBody
         )
     )

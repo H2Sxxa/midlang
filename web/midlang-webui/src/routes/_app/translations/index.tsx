@@ -12,12 +12,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useTranslation, type TranslationOrder } from "@/hooks/use-translation"
+import { useAuth } from "@/hooks/use-auth"
 
 export const Route = createFileRoute("/_app/translations/")({
   component: TranslationListPage,
 })
 
 function TranslationListPage() {
+  const auth = useAuth()
   const [locale, setLocale] = useState("")
   const [keyword, setKeyword] = useState("")
   const [appliedKeyword, setAppliedKeyword] = useState("")
@@ -38,7 +40,9 @@ function TranslationListPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Translation List</h1>
           <p className="mt-1 text-muted-foreground">Search and browse translation resources.</p>
         </div>
-        <Button render={<Link to="/translations/new" />}><PlusIcon /> Add translation</Button>
+        {auth.can("translation:write") && (
+          <Button nativeButton={false} render={<Link to="/translations/new" />}><PlusIcon /> Add translation</Button>
+        )}
       </div>
 
       <Card>
@@ -103,7 +107,9 @@ function TranslationListPage() {
                         <TableCell className="font-medium">{item.key}</TableCell>
                         <TableCell className="max-w-xl whitespace-normal">{item.value}</TableCell>
                         <TableCell className="text-right">
-                          <Button size="icon-sm" variant="ghost" aria-label={`Edit ${item.key}`} render={<Link to="/translations/$locale/$key" params={{ locale: selectedLocale, key: item.key }} />}><PencilSimpleIcon /></Button>
+                          {auth.can("translation:read") && (
+                            <Button nativeButton={false} size="icon-sm" variant="ghost" aria-label={`Edit ${item.key}`} render={<Link to="/translations/$locale/$key" params={{ locale: selectedLocale, key: item.key }} />}><PencilSimpleIcon /></Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

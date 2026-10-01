@@ -24,6 +24,10 @@ where
 {
     let protected = Router::new()
         .route(
+            "/auth/permissions",
+            get(super::http::permissions::permissions_handler),
+        )
+        .route(
             "/store/statistics",
             get(super::http::store::statistics_handler::<Store>),
         )

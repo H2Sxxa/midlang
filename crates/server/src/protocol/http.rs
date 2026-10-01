@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 
 pub mod health;
 pub mod openapi;
+pub mod permissions;
 pub mod store;
 pub mod translate;
 

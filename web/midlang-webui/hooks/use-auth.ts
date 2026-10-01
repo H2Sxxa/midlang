@@ -7,10 +7,14 @@ export type AuthStatus =
   | "authenticated"
   | "error"
 
+export type Permission = string
+
 export type AuthContextValue = {
   readonly token: string | null
   readonly remoteUrl: string
+  readonly permissions: ReadonlyArray<Permission>
   readonly status: AuthStatus
+  readonly can: (permission: Permission) => boolean
   readonly login: (token: string, remoteUrl: string) => Promise<void>
   readonly logout: () => void
 }

@@ -11,7 +11,12 @@
 import { Route as rootRouteImport } from "./routes/__root"
 import { Route as AppRouteImport } from "./routes/_app"
 import { Route as AppIndexRouteImport } from "./routes/_app/index"
+import { Route as AppChangelogRouteImport } from "./routes/_app/changelog"
+import { Route as AppCoverageRouteImport } from "./routes/_app/coverage"
+import { Route as AppExportsRouteImport } from "./routes/_app/exports"
+import { Route as AppIssuesRouteImport } from "./routes/_app/issues"
 import { Route as AppSettingsRouteImport } from "./routes/_app/settings"
+import { Route as AppVersionsRouteImport } from "./routes/_app/versions"
 import { Route as LoginIndexRouteImport } from "./routes/login/index"
 import { Route as AppTranslationsIndexRouteImport } from "./routes/_app/translations/index"
 import { Route as AppTranslationsNewRouteImport } from "./routes/_app/translations/new"
@@ -26,9 +31,34 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: "/",
   getParentRoute: () => AppRoute,
 } as any)
+const AppChangelogRoute = AppChangelogRouteImport.update({
+  id: "/changelog",
+  path: "/changelog",
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCoverageRoute = AppCoverageRouteImport.update({
+  id: "/coverage",
+  path: "/coverage",
+  getParentRoute: () => AppRoute,
+} as any)
+const AppExportsRoute = AppExportsRouteImport.update({
+  id: "/exports",
+  path: "/exports",
+  getParentRoute: () => AppRoute,
+} as any)
+const AppIssuesRoute = AppIssuesRouteImport.update({
+  id: "/issues",
+  path: "/issues",
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: "/settings",
   path: "/settings",
+  getParentRoute: () => AppRoute,
+} as any)
+const AppVersionsRoute = AppVersionsRouteImport.update({
+  id: "/versions",
+  path: "/versions",
   getParentRoute: () => AppRoute,
 } as any)
 const LoginIndexRoute = LoginIndexRouteImport.update({
@@ -55,14 +85,24 @@ const AppTranslationsLocaleKeyRoute =
 
 export interface FileRoutesByFullPath {
   "/": typeof AppIndexRoute
+  "/changelog": typeof AppChangelogRoute
+  "/coverage": typeof AppCoverageRoute
+  "/exports": typeof AppExportsRoute
+  "/issues": typeof AppIssuesRoute
   "/settings": typeof AppSettingsRoute
+  "/versions": typeof AppVersionsRoute
   "/login/": typeof LoginIndexRoute
   "/translations/new": typeof AppTranslationsNewRoute
   "/translations/": typeof AppTranslationsIndexRoute
   "/translations/$locale/$key": typeof AppTranslationsLocaleKeyRoute
 }
 export interface FileRoutesByTo {
+  "/changelog": typeof AppChangelogRoute
+  "/coverage": typeof AppCoverageRoute
+  "/exports": typeof AppExportsRoute
+  "/issues": typeof AppIssuesRoute
   "/settings": typeof AppSettingsRoute
+  "/versions": typeof AppVersionsRoute
   "/": typeof AppIndexRoute
   "/login": typeof LoginIndexRoute
   "/translations/new": typeof AppTranslationsNewRoute
@@ -72,7 +112,12 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   "/_app": typeof AppRouteWithChildren
+  "/_app/changelog": typeof AppChangelogRoute
+  "/_app/coverage": typeof AppCoverageRoute
+  "/_app/exports": typeof AppExportsRoute
+  "/_app/issues": typeof AppIssuesRoute
   "/_app/settings": typeof AppSettingsRoute
+  "/_app/versions": typeof AppVersionsRoute
   "/_app/": typeof AppIndexRoute
   "/login/": typeof LoginIndexRoute
   "/_app/translations/new": typeof AppTranslationsNewRoute
@@ -83,14 +128,24 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | "/"
+    | "/changelog"
+    | "/coverage"
+    | "/exports"
+    | "/issues"
     | "/settings"
+    | "/versions"
     | "/login/"
     | "/translations/new"
     | "/translations/"
     | "/translations/$locale/$key"
   fileRoutesByTo: FileRoutesByTo
   to:
+    | "/changelog"
+    | "/coverage"
+    | "/exports"
+    | "/issues"
     | "/settings"
+    | "/versions"
     | "/"
     | "/login"
     | "/translations/new"
@@ -99,7 +154,12 @@ export interface FileRouteTypes {
   id:
     | "__root__"
     | "/_app"
+    | "/_app/changelog"
+    | "/_app/coverage"
+    | "/_app/exports"
+    | "/_app/issues"
     | "/_app/settings"
+    | "/_app/versions"
     | "/_app/"
     | "/login/"
     | "/_app/translations/new"
@@ -128,11 +188,46 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    "/_app/changelog": {
+      id: "/_app/changelog"
+      path: "/changelog"
+      fullPath: "/changelog"
+      preLoaderRoute: typeof AppChangelogRouteImport
+      parentRoute: typeof AppRoute
+    }
+    "/_app/coverage": {
+      id: "/_app/coverage"
+      path: "/coverage"
+      fullPath: "/coverage"
+      preLoaderRoute: typeof AppCoverageRouteImport
+      parentRoute: typeof AppRoute
+    }
+    "/_app/exports": {
+      id: "/_app/exports"
+      path: "/exports"
+      fullPath: "/exports"
+      preLoaderRoute: typeof AppExportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    "/_app/issues": {
+      id: "/_app/issues"
+      path: "/issues"
+      fullPath: "/issues"
+      preLoaderRoute: typeof AppIssuesRouteImport
+      parentRoute: typeof AppRoute
+    }
     "/_app/settings": {
       id: "/_app/settings"
       path: "/settings"
       fullPath: "/settings"
       preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    "/_app/versions": {
+      id: "/_app/versions"
+      path: "/versions"
+      fullPath: "/versions"
+      preLoaderRoute: typeof AppVersionsRouteImport
       parentRoute: typeof AppRoute
     }
     "/login/": {
@@ -167,7 +262,12 @@ declare module "@tanstack/react-router" {
 }
 
 interface AppRouteChildren {
+  AppChangelogRoute: typeof AppChangelogRoute
+  AppCoverageRoute: typeof AppCoverageRoute
+  AppExportsRoute: typeof AppExportsRoute
+  AppIssuesRoute: typeof AppIssuesRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppVersionsRoute: typeof AppVersionsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppTranslationsNewRoute: typeof AppTranslationsNewRoute
   AppTranslationsIndexRoute: typeof AppTranslationsIndexRoute
@@ -175,7 +275,12 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppChangelogRoute: AppChangelogRoute,
+  AppCoverageRoute: AppCoverageRoute,
+  AppExportsRoute: AppExportsRoute,
+  AppIssuesRoute: AppIssuesRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppVersionsRoute: AppVersionsRoute,
   AppIndexRoute: AppIndexRoute,
   AppTranslationsNewRoute: AppTranslationsNewRoute,
   AppTranslationsIndexRoute: AppTranslationsIndexRoute,

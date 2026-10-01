@@ -14,7 +14,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { useAuth } from "@/hooks/use-auth"
-import { APP_TITLE, navSections } from "@/lib/navigation"
+import { APP_TITLE, footerNavItems, navSections } from "@/lib/navigation"
 
 export function AppSidebar() {
   const matchRoute = useMatchRoute()
@@ -51,8 +51,8 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         {visibleSections.map((section) => (
-          <SidebarGroup key={section.label}>
-            <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
+          <SidebarGroup key={section.label ?? section.items[0]?.to}>
+            {section.label !== undefined && <SidebarGroupLabel>{section.label}</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
                 {section.items.map((item) => (
@@ -74,8 +74,24 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
+          {footerNavItems.map((item) => (
+            <SidebarMenuItem key={item.to}>
+              <SidebarMenuButton
+                isActive={Boolean(matchRoute({ to: item.to }))}
+                tooltip={item.label}
+                render={<Link to={item.to} />}
+              >
+                <item.icon />
+                <span>{item.label}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
           <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Sign out" onClick={handleSignOut}>
+            <SidebarMenuButton
+              tooltip="Sign out"
+              onClick={handleSignOut}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
               <SignOutIcon />
               <span>Sign out</span>
             </SidebarMenuButton>

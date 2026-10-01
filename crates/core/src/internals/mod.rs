@@ -12,6 +12,14 @@ pub mod issue;
 pub mod schema;
 pub mod worker;
 
+/// Selects which derived-state services are enabled for an [`InternalService`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ServiceOptions {
+    pub issue: bool,
+    pub changelog: bool,
+    pub coverage: bool,
+}
+
 /// Owns every derived-state service and presents one
 /// [`StoreObserver`] to the store, so a store write reaches every service
 /// through a single attachment point.
@@ -24,33 +32,28 @@ pub struct InternalService {
 }
 
 impl InternalService {
-    pub async fn conn(url: &str, issue: bool, changelog: bool, coverage: bool) -> Result<Self> {
+    pub async fn conn(url: &str, options: ServiceOptions) -> Result<Self> {
         // Check if the database exists, if not, create it
         if !url.starts_with("sqlite://") && !Path::new(url).exists() {
             Sqlite::create_database(url).await?;
         }
         let pool = SqlitePool::connect(url).await?;
-        Self::conn_with_pool(pool, issue, changelog, coverage).await
+        Self::conn_with_pool(pool, options).await
     }
 
-    pub async fn conn_with_pool(
-        pool: SqlitePool,
-        issue: bool,
-        changelog: bool,
-        coverage: bool,
-    ) -> Result<Self> {
+    pub async fn conn_with_pool(pool: SqlitePool, options: ServiceOptions) -> Result<Self> {
         schema::ensure_tables(&pool).await?;
 
         let mut internal = Self::default();
-        if issue {
+        if options.issue {
             internal.issue = Some(Arc::new(issue::IssueCollector::new(pool.clone()).await?));
         }
-        if changelog {
+        if options.changelog {
             internal.changelog = Some(Arc::new(
                 changelog::ChangelogRecorder::new(pool.clone()).await?,
             ));
         }
-        if coverage {
+        if options.coverage {
             internal.coverage = Some(Arc::new(
                 coverage::CoverageReporter::new(pool.clone()).await?,
             ));

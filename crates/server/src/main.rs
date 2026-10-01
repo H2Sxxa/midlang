@@ -4,7 +4,10 @@ use crate::cli::StoreType;
 use anyhow::Result;
 use clap::Parser;
 use midlang_core::store::{KVStore, MemStore, RedbStore};
-use midlang_core::{internals::InternalService, translation::Translation};
+use midlang_core::{
+    internals::{InternalService, ServiceOptions},
+    translation::Translation,
+};
 use midlang_server::protocol::http::HttpServer;
 use midlang_server::secure::AuthStore;
 use sqlx::{Sqlite, SqlitePool, migrate::MigrateDatabase, sqlite::SqlitePoolOptions};
@@ -45,9 +48,16 @@ pub async fn create_service() -> Result<()> {
         );
     }
     let internal = Arc::new(
-        InternalService::conn_with_pool(pool, arg.issue, arg.changelog, arg.coverage)
-            .await?
-            .service(),
+        InternalService::conn_with_pool(
+            pool,
+            ServiceOptions {
+                issue: arg.issue,
+                changelog: arg.changelog,
+                coverage: arg.coverage,
+            },
+        )
+        .await?
+        .service(),
     );
 
     // The observer has to be attached before the store serves traffic, because

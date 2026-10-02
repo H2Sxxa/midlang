@@ -7,6 +7,7 @@ use axum::{
 };
 use midlang_core::{store::KVStore, translation::Translation};
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::secure::{self, AuthStore};
 
@@ -67,7 +68,9 @@ where
 
     Ok(Router::new()
         .route("/health", any(super::http::health::health))
-        .route("/openapi.json", get(super::http::openapi::handler))
+        .merge(
+            SwaggerUi::new("/docs").url("/openapi.json", super::http::openapi::ApiDoc::document()),
+        )
         .merge(protected)
         .with_state(translation)
         .layer(cors))

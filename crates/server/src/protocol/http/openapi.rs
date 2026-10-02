@@ -36,7 +36,7 @@ use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
 pub struct ApiDoc;
 
 impl ApiDoc {
-    fn with_security() -> utoipa::openapi::OpenApi {
+    pub fn document() -> utoipa::openapi::OpenApi {
         let mut document = <Self as OpenApi>::openapi();
         document
             .components
@@ -50,5 +50,5 @@ impl ApiDoc {
 }
 
 pub async fn handler() -> Json<utoipa::openapi::OpenApi> {
-    Json(ApiDoc::with_security())
+    Json(ApiDoc::document())
 }

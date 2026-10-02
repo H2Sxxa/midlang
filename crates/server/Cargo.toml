@@ -21,4 +21,5 @@ sqlx.workspace = true
 tracing.workspace = true
 tower-http.workspace = true
 utoipa.workspace = true
+utoipa-swagger-ui.workspace = true
 uuid = { workspace = true, features = ["v4"] }

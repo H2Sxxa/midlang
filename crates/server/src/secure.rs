@@ -62,7 +62,7 @@ pub struct AuthStore {
     pool: SqlitePool,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
 pub struct CreatedToken {
     pub id: String,
     pub name: String,
@@ -70,6 +70,19 @@ pub struct CreatedToken {
     pub token_prefix: String,
     pub groups: Vec<String>,
     pub expires_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+pub struct TokenInfo {
+    pub id: String,
+    pub name: String,
+    pub token_prefix: String,
+    pub status: String,
+    pub groups: Vec<String>,
+    pub expires_at: Option<i64>,
+    pub created_at: i64,
+    pub last_used_at: Option<i64>,
+    pub revoked_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -121,6 +134,7 @@ pub async fn middleware(
 
     match auth.authenticate(value).await {
         Ok(Some(context)) => {
+            request.extensions_mut().insert(auth.clone());
             request.extensions_mut().insert(context);
             next.run(request).await
         }
@@ -413,6 +427,67 @@ impl AuthStore {
         .execute(&self.pool)
         .await?;
         Ok(result.rows_affected() == 1)
+    }
+
+    pub async fn list_tokens(&self) -> Result<Vec<TokenInfo>> {
+        let rows = sqlx::query(
+            "SELECT id, name, token_prefix, status, expires_at, created_at,
+                    last_used_at, revoked_at
+             FROM midlang_tokens ORDER BY created_at DESC, id DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut tokens = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id: String = row.get("id");
+            let groups = sqlx::query_scalar(
+                "SELECT group_name FROM midlang_token_groups
+                 WHERE token_id = ? ORDER BY group_name",
+            )
+            .bind(&id)
+            .fetch_all(&self.pool)
+            .await?;
+            tokens.push(TokenInfo {
+                id,
+                name: row.get("name"),
+                token_prefix: row.get("token_prefix"),
+                status: row.get("status"),
+                groups,
+                expires_at: row.get("expires_at"),
+                created_at: row.get("created_at"),
+                last_used_at: row.get("last_used_at"),
+                revoked_at: row.get("revoked_at"),
+            });
+        }
+        Ok(tokens)
+    }
+
+    pub async fn rotate_token(&self, token_id: &str) -> Result<Option<CreatedToken>> {
+        let row = sqlx::query(
+            "SELECT name, expires_at FROM midlang_tokens
+             WHERE id = ? AND status = 'active'",
+        )
+        .bind(token_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else { return Ok(None) };
+
+        let groups = sqlx::query_scalar(
+            "SELECT group_name FROM midlang_token_groups
+             WHERE token_id = ? ORDER BY group_name",
+        )
+        .bind(token_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let name: String = row.get("name");
+        let expires_at: Option<i64> = row.get("expires_at");
+        let replacement = self.create_token(&name, &groups, expires_at).await?;
+        if !self.revoke(token_id).await? {
+            self.revoke(&replacement.id).await?;
+            return Ok(None);
+        }
+        Ok(Some(replacement))
     }
 }
 

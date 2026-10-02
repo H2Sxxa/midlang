@@ -1,11 +1,17 @@
+use std::net::SocketAddr;
+
+pub mod auth;
+pub mod health;
+pub mod openapi;
+pub mod store;
+pub mod translate;
+
 use anyhow::Result;
 use axum::http::HeaderValue;
-use axum::{
-    Router,
-    middleware::from_fn_with_state,
-    routing::{any, get},
-};
+use axum::serve::serve;
+use axum::{Router, middleware::from_fn_with_state, routing::any};
 use midlang_core::{store::KVStore, translation::Translation};
+use tokio::net::TcpListener;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -17,38 +23,16 @@ use crate::secure::{self, AuthStore};
 /// invoked directly in tests and embedded applications.
 pub fn router<Store>(
     translation: Translation<Store>,
-    auth: AuthStore,
+    auth_store: AuthStore,
     cors_origins: &[String],
 ) -> Result<Router>
 where
     Store: KVStore + Clone + Send + Sync + 'static,
 {
-    let protected = Router::new()
-        .route(
-            "/auth/permissions",
-            get(super::http::permissions::permissions_handler),
-        )
-        .route(
-            "/store/statistics",
-            get(super::http::store::statistics_handler::<Store>),
-        )
-        .route(
-            "/t/{locale}",
-            get(super::http::translate::list_translation_handler::<Store>),
-        )
-        .route(
-            "/t/{locale}/{key}",
-            get(super::http::translate::translate_handler::<Store>)
-                .put(super::http::translate::set_translation_handler::<Store>)
-                .delete(super::http::translate::delete_translation_handler::<Store>),
-        )
-        .route(
-            "/t/{locale}/{namespace}/{key}",
-            get(super::http::translate::translate_namespace_handler::<Store>)
-                .put(super::http::translate::set_namespace_translation_handler::<Store>)
-                .delete(super::http::translate::delete_namespace_translation_handler::<Store>),
-        )
-        .layer(from_fn_with_state(auth, secure::middleware));
+    let protected = auth::router::<Translation<Store>>()
+        .merge(store::router::<Store>())
+        .merge(translate::router::<Store>())
+        .layer(from_fn_with_state(auth_store, secure::middleware));
 
     let cors = if cors_origins.is_empty() {
         CorsLayer::new()
@@ -67,13 +51,62 @@ where
     };
 
     Ok(Router::new()
-        .route("/health", any(super::http::health::health))
-        .merge(
-            SwaggerUi::new("/docs").url("/openapi.json", super::http::openapi::ApiDoc::document()),
-        )
+        .route("/health", any(health::health))
+        .merge(SwaggerUi::new("/docs").url("/openapi.json", openapi::ApiDoc::document()))
         .merge(protected)
         .with_state(translation)
         .layer(cors))
+}
+
+/// Axum HTTP server. The transport is TCP, but the protocol exposed to clients
+/// is HTTP, so the type is named after the protocol rather than the socket.
+pub struct HttpServer<Store: KVStore> {
+    translation: Translation<Store>,
+    auth: AuthStore,
+    addr: SocketAddr,
+    cors_origins: Vec<String>,
+}
+
+impl<Store> HttpServer<Store>
+where
+    Store: KVStore + Clone + Send + Sync + 'static,
+{
+    pub fn new(
+        translation: Translation<Store>,
+        auth: AuthStore,
+        addr: SocketAddr,
+        cors_origins: Vec<String>,
+    ) -> Self {
+        Self {
+            translation,
+            auth,
+            addr,
+            cors_origins,
+        }
+    }
+
+    pub async fn translate(&self, locale: &str, key: &str) -> Result<Option<String>> {
+        self.translation.get_key(locale, key).await
+    }
+
+    /// Builds the HTTP router without binding a listener.
+    ///
+    /// Callers can use the returned router with any Axum-compatible
+    /// transport, or invoke it directly in tests and embedded applications.
+    pub fn router(&self) -> Result<axum::Router> {
+        router(
+            self.translation.clone(),
+            self.auth.clone(),
+            &self.cors_origins,
+        )
+    }
+
+    pub async fn serve(&self) -> Result<()> {
+        let router = self.router()?;
+        let listener = TcpListener::bind(self.addr).await?;
+        serve(listener, router).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -109,6 +142,5 @@ mod tests {
         let translation = Translation::new(store, internals);
         let auth = AuthStore::connect(sql).await.unwrap();
         let _router = super::router(translation, auth, &[]).unwrap();
-        // router.oneshot("/health").await.unwrap();
     }
 }

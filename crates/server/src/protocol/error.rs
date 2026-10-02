@@ -38,6 +38,17 @@ pub fn bad_request(message: impl Into<String>) -> Response {
         .into_response()
 }
 
+pub fn internal(message: impl Into<String>) -> Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorBody {
+            code: "internal_error",
+            message: message.into(),
+        }),
+    )
+        .into_response()
+}
+
 /// Maps a store failure to a distinct response: a missing locale or key is a
 /// `404`, everything else is a `500` logged with its full error chain.
 pub fn store(err: Error) -> Response {

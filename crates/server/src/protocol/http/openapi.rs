@@ -11,24 +11,32 @@ use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
     ),
     paths(
         super::health::health,
-        super::permissions::permissions_handler,
-        super::store::statistics_handler,
-        super::translate::list_translation_handler,
-        super::translate::translate_handler,
-        super::translate::set_translation_handler,
-        super::translate::delete_translation_handler,
-        super::translate::translate_namespace_handler,
-        super::translate::set_namespace_translation_handler,
-        super::translate::delete_namespace_translation_handler
+        super::auth::permissions::permissions_handler,
+        super::auth::tokens::list_tokens_handler,
+        super::auth::tokens::create_token_handler,
+        super::auth::tokens::revoke_token_handler,
+        super::auth::tokens::rotate_token_handler,
+        super::store::statistics::statistics_handler,
+        super::translate::locale::list_translation_handler,
+        super::translate::key::translate_handler,
+        super::translate::key::set_translation_handler,
+        super::translate::key::delete_translation_handler,
+        super::translate::namespace::translate_namespace_handler,
+        super::translate::namespace::set_namespace_translation_handler,
+        super::translate::namespace::delete_namespace_translation_handler
     ),
     components(
         schemas(
             super::translate::SetTranslationRequest,
             super::translate::TranslationMessage,
-            super::translate::TranslationListEntry,
-            super::translate::TranslationListPage,
-            super::store::StoreStatistics,
-            super::permissions::PermissionsResponse,
+            super::translate::locale::TranslationListEntry,
+            super::translate::locale::TranslationListPage,
+            super::store::statistics::StoreStatistics,
+            super::auth::permissions::PermissionsResponse,
+            super::auth::tokens::CreateTokenRequest,
+            super::auth::tokens::TokenListResponse,
+            crate::secure::CreatedToken,
+            crate::secure::TokenInfo,
             crate::protocol::error::ErrorBody
         )
     )

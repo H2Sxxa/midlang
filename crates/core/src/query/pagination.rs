@@ -39,7 +39,7 @@ impl Display for SortOrder {
 ///
 /// enum ChangelogKey {
 ///     Id { id: i64 },
-///     CreatedAt { created_at: String, id: i64 },
+///     CreatedAt { created_at: i64, id: i64 },
 /// }
 /// type ChangelogCursor = QueryCursor<ChangelogFilter, ChangelogKey>;
 /// ```

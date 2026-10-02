@@ -2,6 +2,7 @@ pub mod coverage;
 pub mod internals;
 pub mod query;
 pub mod store;
+pub mod time;
 pub mod translation;
 
 #[cfg(test)]

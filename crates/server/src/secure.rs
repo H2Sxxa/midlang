@@ -12,6 +12,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use midlang_core::time::unix_now;
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use sqlx::{Row, SqlitePool, sqlite::SqlitePoolOptions};
@@ -190,7 +191,7 @@ impl AuthStore {
             "CREATE TABLE IF NOT EXISTS midlang_permissions (
                 name TEXT PRIMARY KEY,
                 description TEXT NOT NULL DEFAULT ''
-            )",
+            ) STRICT",
         )
         .execute(&self.pool)
         .await?;
@@ -200,7 +201,7 @@ impl AuthStore {
                 description TEXT NOT NULL DEFAULT '',
                 built_in INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL
-            )",
+            ) STRICT",
         )
         .execute(&self.pool)
         .await?;
@@ -209,7 +210,7 @@ impl AuthStore {
                 group_name TEXT NOT NULL REFERENCES midlang_permission_groups(name) ON DELETE CASCADE,
                 permission_name TEXT NOT NULL REFERENCES midlang_permissions(name) ON DELETE CASCADE,
                 PRIMARY KEY (group_name, permission_name)
-            )",
+            ) STRICT",
         )
         .execute(&self.pool)
         .await?;
@@ -224,7 +225,7 @@ impl AuthStore {
                 created_at INTEGER NOT NULL,
                 last_used_at INTEGER,
                 revoked_at INTEGER
-            )",
+            ) STRICT",
         )
         .execute(&self.pool)
         .await?;
@@ -233,7 +234,7 @@ impl AuthStore {
                 token_id TEXT NOT NULL REFERENCES midlang_tokens(id) ON DELETE CASCADE,
                 group_name TEXT NOT NULL REFERENCES midlang_permission_groups(name),
                 PRIMARY KEY (token_id, group_name)
-            )",
+            ) STRICT",
         )
         .execute(&self.pool)
         .await?;
@@ -489,13 +490,6 @@ impl AuthStore {
         }
         Ok(Some(replacement))
     }
-}
-
-fn unix_now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock is before Unix epoch")
-        .as_secs() as i64
 }
 
 fn hash_secret(secret: &str) -> String {

@@ -2,6 +2,8 @@ use anyhow::Result;
 use sqlx::SqlitePool;
 use std::fmt;
 
+use crate::time::unix_now;
+
 pub enum ChangeState {
     Created,
     Updated,
@@ -25,7 +27,7 @@ pub struct Changelog {
     pub origin: String,
     pub message: Option<String>,
     pub state: ChangeState,
-    pub created_at: String,
+    pub created_at: i64,
 }
 
 impl Changelog {
@@ -42,7 +44,7 @@ impl Changelog {
             origin,
             message: Some(message),
             state,
-            created_at: chrono::Utc::now().to_rfc3339(),
+            created_at: unix_now(),
         }
     }
 
@@ -53,7 +55,7 @@ impl Changelog {
             origin,
             message: None,
             state,
-            created_at: chrono::Utc::now().to_rfc3339(),
+            created_at: unix_now(),
         }
     }
 }
@@ -79,11 +81,14 @@ impl ChangelogRecorder {
                 origin TEXT NOT NULL,
                 state TEXT NOT NULL,
                 message TEXT,
-                created_at TEXT NOT NULL
-            );
+                created_at INTEGER NOT NULL
+            ) STRICT;
 
             CREATE INDEX IF NOT EXISTS idx_changelog_key_locale
-            ON midlang_changelog (key, locale, id);
+            ON midlang_changelog (key, locale, created_at);
+
+            CREATE INDEX IF NOT EXISTS idx_changelog_created_at
+            ON midlang_changelog (created_at);
         ",
         )
         .execute(&self.pool)
@@ -110,7 +115,7 @@ impl ChangelogRecorder {
         .bind(&change.origin)
         .bind(change.state.to_string())
         .bind(&change.message)
-        .bind(&change.created_at)
+        .bind(change.created_at)
         .execute(&self.pool)
         .await?;
         Ok(())

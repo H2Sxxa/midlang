@@ -1,6 +1,6 @@
 use crate::internals::worker::{WorkState, Workable};
+use crate::time::unix_now;
 use anyhow::{Ok, Result};
-use chrono::Utc;
 use scc::HashMap;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
@@ -13,8 +13,8 @@ pub struct Issue {
     pub count: usize,
     pub eventtype: String,
     pub event: IssueEvent,
-    pub created_at: String,
-    pub last_seen: String,
+    pub created_at: i64,
+    pub last_seen: i64,
     pub state: IssueState,
 }
 
@@ -104,12 +104,14 @@ impl IssueCollector {
             id TEXT PRIMARY KEY NOT NULL,
             event TEXT NOT NULL,
             count INTEGER NOT NULL,
-            created_at TEXT NOT NULL,
-            last_seen TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            last_seen INTEGER NOT NULL,
             state TEXT NOT NULL
-        );
+        ) STRICT;
 
         CREATE INDEX IF NOT EXISTS idx_midlang_issues_state ON midlang_issues (state);
+
+        CREATE INDEX IF NOT EXISTS idx_midlang_issues_last_seen ON midlang_issues (last_seen);
         ",
         )
         .execute(&mut *self.pool.acquire().await?)
@@ -123,14 +125,14 @@ impl IssueCollector {
             .await
             .and_modify(|v| {
                 v.count += 1;
-                v.last_seen = Utc::now().to_rfc3339();
+                v.last_seen = unix_now();
             })
             .or_insert_with(|| Issue {
                 count: 1,
                 eventtype: event.eventtype(),
                 event,
-                created_at: Utc::now().to_rfc3339(),
-                last_seen: Utc::now().to_rfc3339(),
+                created_at: unix_now(),
+                last_seen: unix_now(),
                 state: IssueState::Open,
             });
         Ok(())
@@ -164,9 +166,9 @@ impl IssueCollector {
             .bind(issue.event.id().to_string())
             .bind(issue.event.to_string())
             .bind(issue.count as i64)
-            .bind(&issue.last_seen)
+            .bind(issue.last_seen)
             .bind(issue.state.to_string())
-            .bind(&issue.created_at)
+            .bind(issue.created_at)
             .execute(&mut *tx)
             .await?;
         }

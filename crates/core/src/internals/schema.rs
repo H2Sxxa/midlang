@@ -8,7 +8,7 @@ pub async fn ensure_tables(pool: &SqlitePool) -> Result<()> {
         CREATE TABLE IF NOT EXISTS midlang_locales (
             id     INTEGER PRIMARY KEY,
             locale TEXT NOT NULL UNIQUE
-        )
+        ) STRICT
         ",
     )
     .execute(pool)

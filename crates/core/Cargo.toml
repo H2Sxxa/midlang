@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-chrono.workspace = true
 redb.workspace = true
 scc.workspace = true
 serde.workspace = true

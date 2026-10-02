@@ -79,7 +79,7 @@ impl CoverageReporter {
             CREATE TABLE IF NOT EXISTS midlang_coverage_keys (
                 id  INTEGER PRIMARY KEY,
                 key TEXT NOT NULL UNIQUE
-            )
+            ) STRICT
             ",
         )
         .execute(&self.pool)
@@ -90,7 +90,7 @@ impl CoverageReporter {
                 key_id    INTEGER NOT NULL,
                 locale_id INTEGER NOT NULL,
                 PRIMARY KEY (key_id, locale_id)
-            ) WITHOUT ROWID
+            ) STRICT, WITHOUT ROWID
             ",
         )
         .execute(&self.pool)

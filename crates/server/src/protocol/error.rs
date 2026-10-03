@@ -38,6 +38,19 @@ pub fn bad_request(message: impl Into<String>) -> Response {
         .into_response()
 }
 
+/// The request is well-formed but conflicts with the current state, such as a
+/// duplicate group name or a group still assigned to a token.
+pub fn conflict(message: impl Into<String>) -> Response {
+    (
+        StatusCode::CONFLICT,
+        Json(ErrorBody {
+            code: "conflict",
+            message: message.into(),
+        }),
+    )
+        .into_response()
+}
+
 pub fn internal(message: impl Into<String>) -> Response {
     (
         StatusCode::INTERNAL_SERVER_ERROR,

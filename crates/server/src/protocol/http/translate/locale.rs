@@ -66,7 +66,7 @@ pub async fn list_translation_handler<Store>(
 where
     Store: KVRead + Clone + Send + Sync + 'static,
 {
-    if let Err(response) = secure::require_permission(&auth, "translation:list") {
+    if let Err(response) = secure::require_permission(&auth, "translation:read") {
         return response;
     }
 

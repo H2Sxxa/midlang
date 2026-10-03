@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from "./routes/__root"
 import { Route as AppRouteImport } from "./routes/_app"
 import { Route as AppIndexRouteImport } from "./routes/_app/index"
+import { Route as AppAccessRouteImport } from "./routes/_app/access"
 import { Route as AppChangelogRouteImport } from "./routes/_app/changelog"
 import { Route as AppCoverageRouteImport } from "./routes/_app/coverage"
 import { Route as AppExportsRouteImport } from "./routes/_app/exports"
@@ -18,6 +19,9 @@ import { Route as AppIssuesRouteImport } from "./routes/_app/issues"
 import { Route as AppSettingsRouteImport } from "./routes/_app/settings"
 import { Route as AppVersionsRouteImport } from "./routes/_app/versions"
 import { Route as LoginIndexRouteImport } from "./routes/login/index"
+import { Route as AppAccessIndexRouteImport } from "./routes/_app/access/index"
+import { Route as AppAccessGroupsRouteImport } from "./routes/_app/access/groups"
+import { Route as AppAccessTokensRouteImport } from "./routes/_app/access/tokens"
 import { Route as AppTranslationsIndexRouteImport } from "./routes/_app/translations/index"
 import { Route as AppTranslationsNewRouteImport } from "./routes/_app/translations/new"
 import { Route as AppTranslationsLocaleKeyRouteImport } from "./routes/_app/translations/$locale/$key"
@@ -29,6 +33,11 @@ const AppRoute = AppRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: "/",
   path: "/",
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAccessRoute = AppAccessRouteImport.update({
+  id: "/access",
+  path: "/access",
   getParentRoute: () => AppRoute,
 } as any)
 const AppChangelogRoute = AppChangelogRouteImport.update({
@@ -66,6 +75,21 @@ const LoginIndexRoute = LoginIndexRouteImport.update({
   path: "/login/",
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppAccessIndexRoute = AppAccessIndexRouteImport.update({
+  id: "/",
+  path: "/",
+  getParentRoute: () => AppAccessRoute,
+} as any)
+const AppAccessGroupsRoute = AppAccessGroupsRouteImport.update({
+  id: "/groups",
+  path: "/groups",
+  getParentRoute: () => AppAccessRoute,
+} as any)
+const AppAccessTokensRoute = AppAccessTokensRouteImport.update({
+  id: "/tokens",
+  path: "/tokens",
+  getParentRoute: () => AppAccessRoute,
+} as any)
 const AppTranslationsIndexRoute = AppTranslationsIndexRouteImport.update({
   id: "/translations/",
   path: "/translations/",
@@ -85,6 +109,7 @@ const AppTranslationsLocaleKeyRoute =
 
 export interface FileRoutesByFullPath {
   "/": typeof AppIndexRoute
+  "/access": typeof AppAccessRouteWithChildren
   "/changelog": typeof AppChangelogRoute
   "/coverage": typeof AppCoverageRoute
   "/exports": typeof AppExportsRoute
@@ -92,7 +117,10 @@ export interface FileRoutesByFullPath {
   "/settings": typeof AppSettingsRoute
   "/versions": typeof AppVersionsRoute
   "/login/": typeof LoginIndexRoute
+  "/access/groups": typeof AppAccessGroupsRoute
+  "/access/tokens": typeof AppAccessTokensRoute
   "/translations/new": typeof AppTranslationsNewRoute
+  "/access/": typeof AppAccessIndexRoute
   "/translations/": typeof AppTranslationsIndexRoute
   "/translations/$locale/$key": typeof AppTranslationsLocaleKeyRoute
 }
@@ -105,13 +133,17 @@ export interface FileRoutesByTo {
   "/versions": typeof AppVersionsRoute
   "/": typeof AppIndexRoute
   "/login": typeof LoginIndexRoute
+  "/access/groups": typeof AppAccessGroupsRoute
+  "/access/tokens": typeof AppAccessTokensRoute
   "/translations/new": typeof AppTranslationsNewRoute
+  "/access": typeof AppAccessIndexRoute
   "/translations": typeof AppTranslationsIndexRoute
   "/translations/$locale/$key": typeof AppTranslationsLocaleKeyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   "/_app": typeof AppRouteWithChildren
+  "/_app/access": typeof AppAccessRouteWithChildren
   "/_app/changelog": typeof AppChangelogRoute
   "/_app/coverage": typeof AppCoverageRoute
   "/_app/exports": typeof AppExportsRoute
@@ -120,7 +152,10 @@ export interface FileRoutesById {
   "/_app/versions": typeof AppVersionsRoute
   "/_app/": typeof AppIndexRoute
   "/login/": typeof LoginIndexRoute
+  "/_app/access/groups": typeof AppAccessGroupsRoute
+  "/_app/access/tokens": typeof AppAccessTokensRoute
   "/_app/translations/new": typeof AppTranslationsNewRoute
+  "/_app/access/": typeof AppAccessIndexRoute
   "/_app/translations/": typeof AppTranslationsIndexRoute
   "/_app/translations/$locale/$key": typeof AppTranslationsLocaleKeyRoute
 }
@@ -128,6 +163,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | "/"
+    | "/access"
     | "/changelog"
     | "/coverage"
     | "/exports"
@@ -135,7 +171,10 @@ export interface FileRouteTypes {
     | "/settings"
     | "/versions"
     | "/login/"
+    | "/access/groups"
+    | "/access/tokens"
     | "/translations/new"
+    | "/access/"
     | "/translations/"
     | "/translations/$locale/$key"
   fileRoutesByTo: FileRoutesByTo
@@ -148,12 +187,16 @@ export interface FileRouteTypes {
     | "/versions"
     | "/"
     | "/login"
+    | "/access/groups"
+    | "/access/tokens"
     | "/translations/new"
+    | "/access"
     | "/translations"
     | "/translations/$locale/$key"
   id:
     | "__root__"
     | "/_app"
+    | "/_app/access"
     | "/_app/changelog"
     | "/_app/coverage"
     | "/_app/exports"
@@ -162,7 +205,10 @@ export interface FileRouteTypes {
     | "/_app/versions"
     | "/_app/"
     | "/login/"
+    | "/_app/access/groups"
+    | "/_app/access/tokens"
     | "/_app/translations/new"
+    | "/_app/access/"
     | "/_app/translations/"
     | "/_app/translations/$locale/$key"
   fileRoutesById: FileRoutesById
@@ -186,6 +232,13 @@ declare module "@tanstack/react-router" {
       path: "/"
       fullPath: "/"
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    "/_app/access": {
+      id: "/_app/access"
+      path: "/access"
+      fullPath: "/access"
+      preLoaderRoute: typeof AppAccessRouteImport
       parentRoute: typeof AppRoute
     }
     "/_app/changelog": {
@@ -237,6 +290,27 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof LoginIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/_app/access/": {
+      id: "/_app/access/"
+      path: "/"
+      fullPath: "/access/"
+      preLoaderRoute: typeof AppAccessIndexRouteImport
+      parentRoute: typeof AppAccessRoute
+    }
+    "/_app/access/groups": {
+      id: "/_app/access/groups"
+      path: "/groups"
+      fullPath: "/access/groups"
+      preLoaderRoute: typeof AppAccessGroupsRouteImport
+      parentRoute: typeof AppAccessRoute
+    }
+    "/_app/access/tokens": {
+      id: "/_app/access/tokens"
+      path: "/tokens"
+      fullPath: "/access/tokens"
+      preLoaderRoute: typeof AppAccessTokensRouteImport
+      parentRoute: typeof AppAccessRoute
+    }
     "/_app/translations/": {
       id: "/_app/translations/"
       path: "/translations"
@@ -261,7 +335,24 @@ declare module "@tanstack/react-router" {
   }
 }
 
+interface AppAccessRouteChildren {
+  AppAccessGroupsRoute: typeof AppAccessGroupsRoute
+  AppAccessTokensRoute: typeof AppAccessTokensRoute
+  AppAccessIndexRoute: typeof AppAccessIndexRoute
+}
+
+const AppAccessRouteChildren: AppAccessRouteChildren = {
+  AppAccessGroupsRoute: AppAccessGroupsRoute,
+  AppAccessTokensRoute: AppAccessTokensRoute,
+  AppAccessIndexRoute: AppAccessIndexRoute,
+}
+
+const AppAccessRouteWithChildren = AppAccessRoute._addFileChildren(
+  AppAccessRouteChildren,
+)
+
 interface AppRouteChildren {
+  AppAccessRoute: typeof AppAccessRouteWithChildren
   AppChangelogRoute: typeof AppChangelogRoute
   AppCoverageRoute: typeof AppCoverageRoute
   AppExportsRoute: typeof AppExportsRoute
@@ -275,6 +366,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAccessRoute: AppAccessRouteWithChildren,
   AppChangelogRoute: AppChangelogRoute,
   AppCoverageRoute: AppCoverageRoute,
   AppExportsRoute: AppExportsRoute,

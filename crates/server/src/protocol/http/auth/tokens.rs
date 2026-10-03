@@ -8,7 +8,7 @@ use axum::{
 
 use crate::{
     protocol::error::ErrorBody,
-    secure::{self, AuthContext, AuthStore, CreatedToken, TokenInfo},
+    secure::{self, AuthContext, AuthStore, CreatedToken, TokenInfo, UpdateTokenOutcome},
 };
 
 #[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
@@ -23,6 +23,13 @@ pub struct TokenListResponse {
     pub tokens: Vec<TokenInfo>,
 }
 
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
+pub struct UpdateTokenRequest {
+    pub name: String,
+    pub groups: Vec<String>,
+    pub expires_at: Option<i64>,
+}
+
 pub fn router<State>() -> Router<State>
 where
     State: Clone + Send + Sync + 'static,
@@ -32,7 +39,10 @@ where
             "/auth/tokens",
             get(list_tokens_handler).post(create_token_handler),
         )
-        .route("/auth/tokens/{id}", delete(revoke_token_handler))
+        .route(
+            "/auth/tokens/{id}",
+            delete(revoke_token_handler).patch(update_token_handler),
+        )
         .route("/auth/tokens/{id}/rotate", post(rotate_token_handler))
 }
 
@@ -142,6 +152,48 @@ pub async fn rotate_token_handler(
     match store.rotate_token(&id).await {
         Ok(Some(token)) => (StatusCode::CREATED, Json(token)).into_response(),
         Ok(None) => crate::protocol::error::not_found("token not found or inactive".into()),
+        Err(error) => token_error(error),
+    }
+}
+
+#[utoipa::path(
+    patch,
+    path = "/auth/tokens/{id}",
+    params(("id" = String, Path, description = "Token identifier")),
+    request_body = UpdateTokenRequest,
+    responses(
+        (status = 200, description = "Token updated", body = TokenInfo),
+        (status = 400, description = "Invalid token request", body = ErrorBody),
+        (status = 401, description = "Missing or invalid token", body = ErrorBody),
+        (status = 403, description = "Permission denied", body = ErrorBody),
+        (status = 404, description = "Token not found or inactive", body = ErrorBody),
+        (status = 500, description = "Token update unavailable", body = ErrorBody)
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn update_token_handler(
+    Extension(auth): Extension<AuthContext>,
+    Extension(store): Extension<AuthStore>,
+    Path(id): Path<String>,
+    Json(request): Json<UpdateTokenRequest>,
+) -> Response {
+    if let Err(response) = secure::require_permission(&auth, "token:update") {
+        return response;
+    }
+    match store
+        .update_token(&id, &request.name, &request.groups, request.expires_at)
+        .await
+    {
+        Ok(UpdateTokenOutcome::Updated(token)) => Json(token).into_response(),
+        Ok(UpdateTokenOutcome::NotFound) => {
+            crate::protocol::error::not_found("token not found or inactive".into())
+        }
+        Ok(UpdateTokenOutcome::InvalidInput(message)) => {
+            crate::protocol::error::bad_request(message)
+        }
+        Ok(UpdateTokenOutcome::UnknownGroups(unknown)) => crate::protocol::error::bad_request(
+            format!("unknown permission groups: {}", unknown.join(", ")),
+        ),
         Err(error) => token_error(error),
     }
 }

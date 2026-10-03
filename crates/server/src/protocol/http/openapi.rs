@@ -12,8 +12,14 @@ use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
     paths(
         super::health::health,
         super::auth::permissions::permissions_handler,
+        super::auth::groups::list_permissions_handler,
+        super::auth::groups::list_groups_handler,
+        super::auth::groups::create_group_handler,
+        super::auth::groups::update_group_handler,
+        super::auth::groups::delete_group_handler,
         super::auth::tokens::list_tokens_handler,
         super::auth::tokens::create_token_handler,
+        super::auth::tokens::update_token_handler,
         super::auth::tokens::revoke_token_handler,
         super::auth::tokens::rotate_token_handler,
         super::store::statistics::statistics_handler,
@@ -33,10 +39,17 @@ use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
             super::translate::locale::TranslationListPage,
             super::store::statistics::StoreStatistics,
             super::auth::permissions::PermissionsResponse,
+            super::auth::groups::CreateGroupRequest,
+            super::auth::groups::UpdateGroupRequest,
+            super::auth::groups::GroupListResponse,
+            super::auth::groups::PermissionListResponse,
             super::auth::tokens::CreateTokenRequest,
+            super::auth::tokens::UpdateTokenRequest,
             super::auth::tokens::TokenListResponse,
             crate::secure::CreatedToken,
             crate::secure::TokenInfo,
+            crate::secure::GroupInfo,
+            crate::secure::PermissionInfo,
             crate::protocol::error::ErrorBody
         )
     )

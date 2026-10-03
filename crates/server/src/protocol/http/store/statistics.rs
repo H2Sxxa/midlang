@@ -38,7 +38,7 @@ pub async fn statistics_handler<Store>(
 where
     Store: midlang_core::store::KVRead + Clone + Send + Sync + 'static,
 {
-    if let Err(response) = secure::require_permission(&auth, "translation:list") {
+    if let Err(response) = secure::require_permission(&auth, "translation:read") {
         return response;
     }
 

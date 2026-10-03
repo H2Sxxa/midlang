@@ -3,6 +3,8 @@ import {
   ClockCounterClockwiseIcon,
   ExportIcon,
   GearSixIcon,
+  KeyIcon,
+  ShieldCheckIcon,
   WarningCircleIcon,
   TranslateIcon,
   SquaresFourIcon,
@@ -28,12 +30,12 @@ export type NavSection = {
 export const navSections: ReadonlyArray<NavSection> = [
   {
     label: undefined,
-    items: [{ to: "/", label: "Overview", icon: SquaresFourIcon, permission: "translation:list" }],
+    items: [{ to: "/", label: "Overview", icon: SquaresFourIcon, permission: "translation:read" }],
   },
   {
     label: "Translation",
     items: [
-      { to: "/translations", label: "Translation List", icon: TranslateIcon, permission: "translation:list" },
+      { to: "/translations", label: "Translation List", icon: TranslateIcon, permission: "translation:read" },
       { to: "/translations/new", label: "Add Translation", icon: TranslateIcon, permission: "translation:write" },
     ],
   },
@@ -50,6 +52,18 @@ export const navSections: ReadonlyArray<NavSection> = [
     items: [
       { to: "/versions", label: "Versions", icon: ClockCounterClockwiseIcon },
       { to: "/exports", label: "Exports", icon: ExportIcon },
+    ],
+  },
+  {
+    label: "Access",
+    items: [
+      { to: "/access/tokens", label: "API Tokens", icon: KeyIcon, permission: "token:read" },
+      {
+        to: "/access/groups",
+        label: "Permission Groups",
+        icon: ShieldCheckIcon,
+        permission: "permission:read",
+      },
     ],
   },
 ]

@@ -54,16 +54,8 @@ impl AuthStore {
         if groups.is_empty() {
             bail!("at least one permission group is required");
         }
-
-        for group in groups {
-            let exists: Option<String> =
-                sqlx::query_scalar("SELECT name FROM midlang_permission_groups WHERE name = ?")
-                    .bind(group)
-                    .fetch_optional(&self.pool)
-                    .await?;
-            if exists.is_none() {
-                bail!("permission group '{group}' does not exist");
-            }
+        if let Some(group) = self.unknown_groups(groups).await?.first() {
+            bail!("permission group '{group}' does not exist");
         }
 
         let id = Uuid::new_v4().to_string();
@@ -272,12 +264,7 @@ impl AuthStore {
             return Ok(UpdateTokenOutcome::NotFound);
         }
 
-        let mut unknown = Vec::new();
-        for group in &groups {
-            if !self.group_exists(group).await? {
-                unknown.push(group.clone());
-            }
-        }
+        let unknown = self.unknown_groups(&groups).await?;
         if !unknown.is_empty() {
             return Ok(UpdateTokenOutcome::UnknownGroups(unknown));
         }

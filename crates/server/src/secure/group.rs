@@ -139,16 +139,19 @@ impl AuthStore {
         description: &str,
         permissions: &[String],
     ) -> Result<UpdateGroupOutcome> {
-        let row = sqlx::query("SELECT built_in FROM midlang_permission_groups WHERE name = ?")
-            .bind(name)
-            .fetch_optional(&self.pool)
-            .await?;
+        let row = sqlx::query(
+            "SELECT built_in, created_at FROM midlang_permission_groups WHERE name = ?",
+        )
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await?;
         let Some(row) = row else {
             return Ok(UpdateGroupOutcome::NotFound);
         };
         if row.get::<i64, _>("built_in") != 0 {
             return Ok(UpdateGroupOutcome::BuiltIn);
         }
+        let created_at: i64 = row.get("created_at");
 
         let permissions = normalized_names(permissions);
         let unknown = self.unknown_permissions(&permissions).await?;
@@ -176,11 +179,6 @@ impl AuthStore {
             .execute(&mut *transaction)
             .await?;
         }
-        let created_at: i64 =
-            sqlx::query_scalar("SELECT created_at FROM midlang_permission_groups WHERE name = ?")
-                .bind(name)
-                .fetch_one(&mut *transaction)
-                .await?;
         transaction.commit().await?;
 
         Ok(UpdateGroupOutcome::Updated(GroupInfo {
@@ -243,15 +241,35 @@ impl AuthStore {
     }
 
     async fn unknown_permissions(&self, permissions: &[String]) -> Result<Vec<String>> {
+        self.unknown_names("midlang_permissions", permissions).await
+    }
+
+    pub(super) async fn unknown_groups(&self, groups: &[String]) -> Result<Vec<String>> {
+        self.unknown_names("midlang_permission_groups", groups)
+            .await
+    }
+
+    /// Returns the entries of `names` that are missing from `table`, using a
+    /// single query so validation never costs a round trip per name. `table` is
+    /// a code-owned literal, never request data.
+    async fn unknown_names(&self, table: &str, names: &[String]) -> Result<Vec<String>> {
+        if names.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
+            "SELECT name FROM {table} WHERE name IN ("
+        ));
+        let mut separated = builder.separated(", ");
+        for name in names {
+            separated.push_bind(name.as_str());
+        }
+        separated.push_unseparated(")");
+        let known: Vec<String> = builder.build_query_scalar().fetch_all(&self.pool).await?;
+
         let mut unknown = Vec::new();
-        for permission in permissions {
-            let exists: Option<String> =
-                sqlx::query_scalar("SELECT name FROM midlang_permissions WHERE name = ?")
-                    .bind(permission)
-                    .fetch_optional(&self.pool)
-                    .await?;
-            if exists.is_none() {
-                unknown.push(permission.clone());
+        for name in names {
+            if !known.contains(name) {
+                unknown.push(name.clone());
             }
         }
         Ok(unknown)

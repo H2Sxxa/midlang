@@ -1,9 +1,11 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { RouterProvider, createRouter } from "@tanstack/react-router"
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { AuthProvider } from "@/components/auth-provider"
 import { useAuth } from "@/hooks/use-auth"
+import { toast } from "@/hooks/use-toast"
+import { errorMessage, isUnauthorized } from "@/lib/api-error"
 import { routeTree } from "./routeTree.gen"
 import "./global.css"
 
@@ -41,7 +43,29 @@ const router = createRouter({
   scrollRestoration: true,
 })
 
-const queryClient = new QueryClient()
+const SESSION_EXPIRED_TOAST_ID = "session-expired"
+
+/**
+ * The single place where failed requests are reported. Every query and mutation
+ * throws an `ApiError`, so an expired session is recognized here instead of in
+ * each hook, and the toast is shared by all of them.
+ */
+function reportRequestError(error: unknown): void {
+  if (isUnauthorized(error)) {
+    toast.error({
+      id: SESSION_EXPIRED_TOAST_ID,
+      message: "Authentication expired",
+      description: "Please sign in again.",
+    })
+    return
+  }
+  toast.error({ message: errorMessage(error) })
+}
+
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: reportRequestError }),
+  mutationCache: new MutationCache({ onError: reportRequestError }),
+})
 
 declare module "@tanstack/react-router" {
   interface Register {

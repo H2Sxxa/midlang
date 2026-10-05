@@ -81,32 +81,23 @@ function TokensPage() {
     }
   }
 
-  const handleRotate = async (token: TokenInfo) => {
-    try {
-      const rotated = await access.rotateMutation.mutateAsync(token.id)
-      setSecret(rotated)
-    } catch (error) {
-      toast.error({
-        message: "Rotation failed",
-        description: error instanceof Error ? error.message : "Unable to rotate the token.",
-      })
-    }
+  const handleRotate = (token: TokenInfo) => {
+    access.rotateMutation.mutate(token.id, {
+      onSuccess: (rotated) => setSecret(rotated),
+    })
   }
 
-  const handleRevoke = async () => {
+  const handleRevoke = () => {
     if (pendingRevoke === null) {
       return
     }
-    try {
-      await access.revokeMutation.mutateAsync(pendingRevoke.id)
-      toast.success({ message: "Token revoked", description: pendingRevoke.name })
-      setPendingRevoke(null)
-    } catch (error) {
-      toast.error({
-        message: "Revoke failed",
-        description: error instanceof Error ? error.message : "Unable to revoke the token.",
-      })
-    }
+    const token = pendingRevoke
+    access.revokeMutation.mutate(token.id, {
+      onSuccess: () => {
+        toast.success({ message: "Token revoked", description: token.name })
+        setPendingRevoke(null)
+      },
+    })
   }
 
   if (!canRead) {

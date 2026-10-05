@@ -11,6 +11,7 @@ export type ToastKind = "success" | "info" | "warning" | "error"
 export type ToastInput = {
   readonly message: string
   readonly description?: string
+  readonly id?: string
 }
 
 export type ToastApi = {
@@ -20,7 +21,10 @@ export type ToastApi = {
   readonly error: (input: ToastInput) => void
 }
 
-type SonnerToast = (message: string, options: { description?: string }) => string | number
+type SonnerToast = (
+  message: string,
+  options: { description?: string; id?: string },
+) => string | number
 
 const sonnerKinds: Record<ToastKind, SonnerToast> = {
   success: sonnerToast.success,
@@ -30,10 +34,11 @@ const sonnerKinds: Record<ToastKind, SonnerToast> = {
 }
 
 function show(kind: ToastKind, input: ToastInput): void {
-  sonnerKinds[kind](input.message, { description: input.description })
+  sonnerKinds[kind](input.message, { description: input.description, id: input.id })
 }
 
-const toastApi: ToastApi = {
+/** App-wide toast facade, also usable outside React from the query client. */
+export const toast: ToastApi = {
   success: (input) => {
     show("success", input)
   },
@@ -57,5 +62,5 @@ const toastApi: ToastApi = {
  * ```
  */
 export function useToast(): ToastApi {
-  return toastApi
+  return toast
 }

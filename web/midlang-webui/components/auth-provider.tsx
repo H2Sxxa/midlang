@@ -3,6 +3,7 @@ import { createApiClient } from "@/api/client"
 import { defaultRemoteUrl } from "@/hooks/config"
 import { useToast } from "@/hooks/use-toast"
 import { AuthContext, type AuthStatus, type Permission } from "@/hooks/use-auth"
+import { errorMessage, isUnauthorized } from "@/lib/api-error"
 
 type AuthState = {
   readonly status: AuthStatus
@@ -34,24 +35,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const client = createApiClient(remoteUrl, token)
       const result = await client.GET("/auth/permissions")
-      if (result.error !== undefined || result.data === undefined) {
-        const message = result.response.status === 401
-          ? "The API token is invalid or expired."
-          : "Unable to verify the API token."
-        throw new Error(message)
-      }
 
       setState({
         status: "authenticated",
         token,
         remoteUrl,
-        permissions: result.data.permissions,
+        permissions: result.data!.permissions,
       })
     } catch (error) {
       setState((current) => ({ ...current, status: "error" }))
       toast.error({
         message: "Sign in failed",
-        description: error instanceof Error ? error.message : String(error),
+        description: isUnauthorized(error)
+          ? "The API token is invalid or expired."
+          : errorMessage(error),
       })
       throw error
     }

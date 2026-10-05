@@ -17,19 +17,7 @@ function OverviewPage() {
   const client = useClient();
   const statisticsQuery = useQuery({
     queryKey: ["store-statistics", client],
-    enabled: client !== null,
-    queryFn: async () => {
-      if (client === null) {
-        throw new Error("API client is unavailable");
-      }
-
-      const result = await client.GET("/store/statistics");
-      if (result.error !== undefined || result.data === undefined) {
-        throw new Error("Unable to load store statistics.");
-      }
-
-      return result.data;
-    },
+    queryFn: async () => (await client.GET("/store/statistics")).data!,
   });
 
   const statistics = statisticsQuery.data ?? null;

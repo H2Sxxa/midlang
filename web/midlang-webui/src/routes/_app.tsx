@@ -6,6 +6,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { useAuth } from "@/hooks/use-auth"
 import { APP_TITLE, navItems } from "@/lib/navigation"
 
 export const Route = createFileRoute("/_app")({
@@ -18,7 +19,15 @@ export const Route = createFileRoute("/_app")({
 })
 
 function AppLayout() {
+  const auth = useAuth()
   const pathname = useLocation({ select: (location) => location.pathname })
+
+  // Signing out clears the token before the redirect lands, so stop rendering
+  // the guarded pages (and their API client) for that frame.
+  if (auth.status !== "authenticated") {
+    return null
+  }
+
   const title = [...navItems]
     .sort((left, right) => String(right.to).length - String(left.to).length)
     .find((item) => pathname.startsWith(typeof item.to === "string" ? item.to : ""))

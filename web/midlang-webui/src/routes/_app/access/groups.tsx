@@ -85,20 +85,17 @@ function GroupsPage() {
     }
   }
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (pendingDelete === null) {
       return
     }
-    try {
-      await access.deleteMutation.mutateAsync(pendingDelete.name)
-      toast.success({ message: "Group deleted", description: pendingDelete.name })
-      setPendingDelete(null)
-    } catch (error) {
-      toast.error({
-        message: "Delete failed",
-        description: error instanceof Error ? error.message : "Unable to delete the group.",
-      })
-    }
+    const group = pendingDelete
+    access.deleteMutation.mutate(group.name, {
+      onSuccess: () => {
+        toast.success({ message: "Group deleted", description: group.name })
+        setPendingDelete(null)
+      },
+    })
   }
 
   if (!canRead) {

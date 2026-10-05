@@ -1,4 +1,7 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+};
 
 use crate::cli::StoreType;
 use anyhow::Result;
@@ -68,10 +71,14 @@ pub async fn create_service() -> Result<()> {
     }
 
     let translation = Translation::new(store, internal);
+    let host: IpAddr = arg
+        .host
+        .parse()
+        .map_err(|error| anyhow::anyhow!("invalid --host '{}': {error}", arg.host))?;
     let server = HttpServer::new(
         translation,
         auth,
-        SocketAddr::new("127.0.0.1".parse().unwrap(), arg.port),
+        SocketAddr::new(host, arg.port),
         arg.cors_origin,
     );
     server.serve().await?;

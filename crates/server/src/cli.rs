@@ -4,7 +4,11 @@ use std::{fmt, str::FromStr};
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
-    /// The address to bind the server to.
+    /// The host address to bind the server to. Use 0.0.0.0 to accept
+    /// connections from outside the local machine (for example in a container).
+    #[arg(long, default_value = "127.0.0.1")]
+    pub host: String,
+    /// The port to bind the server to.
     #[arg(short, long, default_value_t = 4321)]
     pub port: u16,
     /// Allowed CORS origins. Repeat the option or separate origins with commas.

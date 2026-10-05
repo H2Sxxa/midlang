@@ -1,0 +1,15 @@
+# Build context for web/midlang-webui/Dockerfile.
+node_modules
+dist
+dist-ssr
+.tanstack
+
+# Stray router-plugin scratch directory (node_modules only).
+web
+
+# The API endpoint is a build argument, so local .env files must not leak in.
+.env
+.env.*
+!.env.example
+
+.DS_Store

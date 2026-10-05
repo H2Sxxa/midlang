@@ -1,0 +1,23 @@
+# Build context for crates/server/Dockerfile. Only the Rust workspace is needed.
+target
+crates/**/target
+
+# Front ends are built by their own Dockerfile with their own context.
+web
+
+# VCS and tooling metadata.
+.git
+.gitignore
+.github
+.agents
+.codex
+vendor
+docs
+
+**/node_modules
+
+# Runtime state must never be baked into an image.
+**/*.rdb
+**/sqlite.db*
+
+**/.DS_Store

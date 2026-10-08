@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useTranslation, type TranslationOrder } from "@/hooks/use-translation"
 import { useAuth } from "@/hooks/use-auth"
@@ -52,14 +53,21 @@ function TranslationListPage() {
             {locales.length === 0 ? (
               <Input id="locale" placeholder="en-US" value={locale} onChange={(event) => setLocale(event.target.value)} />
             ) : (
-              <select
-                id="locale"
-                className="h-8 border border-input bg-transparent px-2.5 text-xs outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+              <Select
                 value={selectedLocale}
-                onChange={(event) => setLocale(event.target.value)}
+                onValueChange={(next) => {
+                  if (next !== null) {
+                    setLocale(next)
+                  }
+                }}
               >
-                {locales.map((item) => <option key={item}>{item}</option>)}
-              </select>
+                <SelectTrigger id="locale" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {locales.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+                </SelectContent>
+              </Select>
             )}
           </div>
           <form className="flex flex-2 gap-2" onSubmit={handleSearch}>
@@ -71,15 +79,22 @@ function TranslationListPage() {
           </form>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="order">Order</Label>
-            <select
-              id="order"
-              className="h-8 border border-input bg-transparent px-2.5 text-xs outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+            <Select
               value={order}
-              onChange={(event) => setOrder(event.target.value as TranslationOrder)}
+              onValueChange={(next) => {
+                if (next === "asc" || next === "desc") {
+                  setOrder(next)
+                }
+              }}
             >
-              <option value="asc">A → Z</option>
-              <option value="desc">Z → A</option>
-            </select>
+              <SelectTrigger id="order" className="w-24">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="asc">A → Z</SelectItem>
+                <SelectItem value="desc">Z → A</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>

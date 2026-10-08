@@ -82,3 +82,17 @@ pub fn store(err: Error) -> Response {
         }
     }
 }
+
+/// Maps a diagnostics failure (issues, coverage, changelog) to a `500` logged
+/// with its full error chain.
+pub fn diagnostics(err: Error) -> Response {
+    tracing::error!(error = ?err, "diagnostics request failed");
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorBody {
+            code: "internal_error",
+            message: "internal error".to_string(),
+        }),
+    )
+        .into_response()
+}

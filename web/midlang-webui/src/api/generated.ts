@@ -133,6 +133,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_issues_handler"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_issue_handler"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["update_issue_handler"];
+        trace?: never;
+    };
     "/store/statistics": {
         parameters: {
             query?: never;
@@ -236,6 +268,25 @@ export interface components {
         GroupListResponse: {
             groups: components["schemas"]["GroupInfo"][];
         };
+        IssueListPage: {
+            items: components["schemas"]["IssueMessage"][];
+            /** @description URL-safe cursor token for the next page, if one exists. */
+            next?: string | null;
+        };
+        IssueMessage: {
+            count: number;
+            /** Format: int64 */
+            created_at: number;
+            id: string;
+            kind: string;
+            /** Format: int64 */
+            last_seen: number;
+            payload: {
+                [key: string]: unknown;
+            };
+            state: string;
+            summary: string;
+        };
         PermissionInfo: {
             description: string;
             /**
@@ -297,6 +348,10 @@ export interface components {
         UpdateGroupRequest: {
             description: string;
             permissions: string[];
+        };
+        UpdateIssueRequest: {
+            /** @description New state: `open`, `closed` or `ignored`. */
+            state: string;
         };
         UpdateTokenRequest: {
             /** Format: int64 */
@@ -963,6 +1018,208 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+        };
+    };
+    list_issues_handler: {
+        parameters: {
+            query?: {
+                /** @description Filter by state: `open`, `closed` or `ignored`. */
+                state?: string;
+                /** @description Filter by issue kind, e.g. `missing_translation` or `missing_locale`. */
+                kind?: string;
+                /** @description Case-insensitive substring matched against the summary, payload and kind. */
+                keyword?: string;
+                /** @description Sort field: `last_seen` (default), `created_at` or `count`. */
+                sort?: string;
+                /** @description Sort direction: `asc` or `desc` (default). A cursor carries its own direction. */
+                order?: string;
+                /** @description Number of issues to return. Defaults to 100. */
+                limit?: number;
+                /** @description Cursor returned by the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged issues */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueListPage"];
+                };
+            };
+            /** @description Invalid query or cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Missing or invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Issue listing unavailable */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_issue_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Issue identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Issue found */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueMessage"];
+                };
+            };
+            /** @description Missing or invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Issue not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Issue lookup unavailable */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_issue_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Issue identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateIssueRequest"];
+            };
+        };
+        responses: {
+            /** @description Issue state updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueMessage"];
+                };
+            };
+            /** @description Invalid state */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Missing or invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Issue not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Issue update unavailable */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

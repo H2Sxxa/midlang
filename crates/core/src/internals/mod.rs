@@ -8,7 +8,7 @@ use crate::store::StoreObserver;
 
 pub mod changelog;
 pub mod coverage;
-pub mod issue;
+pub mod issues;
 pub mod schema;
 pub mod worker;
 
@@ -25,7 +25,7 @@ pub struct ServiceOptions {
 /// through a single attachment point.
 #[derive(Default)]
 pub struct InternalService {
-    pub issue: Option<Arc<issue::IssueCollector>>,
+    pub issue: Option<Arc<issues::IssueCollector>>,
     pub changelog: Option<Arc<changelog::ChangelogRecorder>>,
     pub coverage: Option<Arc<coverage::CoverageReporter>>,
     workplace: Arc<worker::Workplace>,
@@ -46,7 +46,7 @@ impl InternalService {
 
         let mut internal = Self::default();
         if options.issue {
-            internal.issue = Some(Arc::new(issue::IssueCollector::new(pool.clone()).await?));
+            internal.issue = Some(Arc::new(issues::IssueCollector::new(pool.clone()).await?));
         }
         if options.changelog {
             internal.changelog = Some(Arc::new(
@@ -63,7 +63,7 @@ impl InternalService {
     }
 
     pub async fn issue_collector(mut self, pool: &SqlitePool) -> Result<Self> {
-        self.issue = Some(Arc::new(issue::IssueCollector::new(pool.clone()).await?));
+        self.issue = Some(Arc::new(issues::IssueCollector::new(pool.clone()).await?));
         Ok(self)
     }
 
@@ -82,7 +82,7 @@ impl InternalService {
         self
     }
 
-    pub async fn report_issue(&self, event: issue::IssueEvent) -> Result<()> {
+    pub async fn report_issue<E: issues::IssueEvent>(&self, event: E) -> Result<()> {
         if let Some(issue_collector) = &self.issue {
             issue_collector.report(event).await?;
         }
@@ -94,6 +94,38 @@ impl InternalService {
             changelog_recorder.report_change(change).await?;
         }
         Ok(())
+    }
+
+    /// Lists reported issues. An [InternalService] without an issue collector
+    /// holds no issues, so the listing is empty rather than an error.
+    pub async fn list_issues(
+        &self,
+        cursor: &issues::IssueCursor,
+        limit: usize,
+    ) -> Result<issues::IssuePage> {
+        match &self.issue {
+            Some(collector) => collector.list(cursor, limit).await,
+            None => Ok(issues::IssuePage {
+                items: Vec::new(),
+                next: None,
+            }),
+        }
+    }
+
+    /// Loads one issue by its id.
+    pub async fn issue(&self, id: &str) -> Result<Option<issues::IssueRecord>> {
+        match &self.issue {
+            Some(collector) => collector.get(id).await,
+            None => Ok(None),
+        }
+    }
+
+    /// Marks one issue's state. Returns `false` when no such issue exists.
+    pub async fn set_issue_state(&self, id: &str, state: issues::IssueState) -> Result<bool> {
+        match &self.issue {
+            Some(collector) => collector.set_state(id, state).await,
+            None => Ok(false),
+        }
     }
 }
 

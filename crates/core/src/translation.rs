@@ -2,7 +2,7 @@ use crate::{
     internals::{
         InternalService,
         changelog::{ChangeState, Changelog},
-        issue::IssueEvent,
+        issues::{IssueCursor, IssuePage, IssueRecord, IssueState, TranslationIssue},
     },
     store::{KVCursor, KVPage, KVRead, KVStore, StoreError, ValueState},
 };
@@ -41,7 +41,7 @@ where
             Ok(None) => {
                 // Missing translation, report issue
                 self.internal_service
-                    .report_issue(IssueEvent::MissingTranslation {
+                    .report_issue(TranslationIssue::MissingTranslation {
                         locale: locale.to_string(),
                         key: key.to_string(),
                     })
@@ -51,7 +51,7 @@ where
             Err(err) => {
                 if let Some(StoreError::LocaleNotExist(locale)) = err.downcast_ref::<StoreError>() {
                     self.internal_service
-                        .report_issue(IssueEvent::MissingLocale {
+                        .report_issue(TranslationIssue::MissingLocale {
                             locale: locale.clone(),
                         })
                         .await?;
@@ -71,6 +71,21 @@ where
     /// report missing keys as issues.
     pub fn list(&self, locale: &str, cursor: &KVCursor, limit: usize) -> Result<KVPage> {
         self.store.list(locale, cursor, limit)
+    }
+
+    /// Lists reported translation issues, most recent first by default.
+    pub async fn list_issues(&self, cursor: &IssueCursor, limit: usize) -> Result<IssuePage> {
+        self.internal_service.list_issues(cursor, limit).await
+    }
+
+    /// Loads one reported issue by its id.
+    pub async fn issue(&self, id: &str) -> Result<Option<IssueRecord>> {
+        self.internal_service.issue(id).await
+    }
+
+    /// Marks one issue's state. Returns `false` when no such issue exists.
+    pub async fn set_issue_state(&self, id: &str, state: IssueState) -> Result<bool> {
+        self.internal_service.set_issue_state(id, state).await
     }
 }
 

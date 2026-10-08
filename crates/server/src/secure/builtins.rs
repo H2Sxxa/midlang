@@ -82,6 +82,11 @@ pub(super) const BUILTIN_PERMISSIONS: &[BuiltinPermission] = &[
         implies: &[],
     },
     BuiltinPermission {
+        name: "diagnostic:manage",
+        description: "Resolve, close or ignore issues",
+        implies: &["diagnostic:read"],
+    },
+    BuiltinPermission {
         name: "audit:read",
         description: "Read audit history",
         implies: &[],
@@ -121,6 +126,7 @@ pub(super) const BUILTIN_GROUPS: &[(&str, &[&str])] = &[
             "token:revoke",
             "permission:manage",
             "diagnostic:read",
+            "diagnostic:manage",
             "audit:read",
             "server:admin",
         ],

@@ -30,9 +30,46 @@ type DeleteTranslationInput = {
   readonly key: string
 }
 
-export function useTranslation({ locale, keyword, order, key }: TranslationOptions) {
+/**
+ * Write operations on translations. Kept apart from [useTranslation] so a page
+ * that only writes does not also start the read queries, which fire on every
+ * keystroke of a locale or key input.
+ */
+export function useTranslationMutations() {
   const client = useClient()
   const queryClient = useQueryClient()
+
+  const invalidateTranslations = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["translations"] })
+    await queryClient.invalidateQueries({ queryKey: ["store-statistics"] })
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async ({ locale, key, value }: SaveTranslationInput) => {
+      const result = await client.PUT("/t/{locale}/{key}", {
+        params: { path: { locale, key } },
+        body: { value },
+      })
+      return result.data!
+    },
+    onSuccess: invalidateTranslations,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async ({ locale, key }: DeleteTranslationInput) => {
+      await client.DELETE("/t/{locale}/{key}", {
+        params: { path: { locale, key } },
+      })
+    },
+    onSuccess: invalidateTranslations,
+  })
+
+  return { saveMutation, deleteMutation }
+}
+
+export function useTranslation({ locale, keyword, order, key }: TranslationOptions) {
+  const client = useClient()
+  const { saveMutation, deleteMutation } = useTranslationMutations()
 
   const statisticsQuery = useQuery({
     queryKey: ["store-statistics", client],
@@ -82,31 +119,6 @@ export function useTranslation({ locale, keyword, order, key }: TranslationOptio
       })
       return result.data!
     },
-  })
-
-  const invalidateTranslations = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["translations"] })
-    await queryClient.invalidateQueries({ queryKey: ["store-statistics"] })
-  }
-
-  const saveMutation = useMutation({
-    mutationFn: async ({ locale, key, value }: SaveTranslationInput) => {
-      const result = await client.PUT("/t/{locale}/{key}", {
-        params: { path: { locale, key } },
-        body: { value },
-      })
-      return result.data!
-    },
-    onSuccess: invalidateTranslations,
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: async ({ locale, key }: DeleteTranslationInput) => {
-      await client.DELETE("/t/{locale}/{key}", {
-        params: { path: { locale, key } },
-      })
-    },
-    onSuccess: invalidateTranslations,
   })
 
   return {

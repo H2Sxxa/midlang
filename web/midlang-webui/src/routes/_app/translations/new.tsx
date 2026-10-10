@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useTranslation } from "@/hooks/use-translation"
+import { useTranslationMutations } from "@/hooks/use-translation"
 import { useAuth } from "@/hooks/use-auth"
 
 export const Route = createFileRoute("/_app/translations/new")({
@@ -19,7 +19,7 @@ function NewTranslationPage() {
   const [key, setKey] = useState("")
   const [value, setValue] = useState("")
   const [error, setError] = useState<string | null>(null)
-  const translation = useTranslation({ locale, keyword: "", order: "asc" })
+  const { saveMutation } = useTranslationMutations()
 
   const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault()
@@ -31,7 +31,7 @@ function NewTranslationPage() {
 
     setError(null)
     try {
-      await translation.saveMutation.mutateAsync(input)
+      await saveMutation.mutateAsync(input)
       await navigate({
         to: "/translations/$locale/$key",
         params: { locale: input.locale, key: input.key },
@@ -76,8 +76,8 @@ function NewTranslationPage() {
               <Input id="value" placeholder="Checkout" value={value} onChange={(event) => setValue(event.target.value)} />
             </div>
             {error !== null && <p className="text-xs text-destructive">{error}</p>}
-            <Button type="submit" disabled={translation.saveMutation.isPending}>
-              <FloppyDiskIcon /> {translation.saveMutation.isPending ? "Saving…" : "Save translation"}
+            <Button type="submit" disabled={saveMutation.isPending}>
+              <FloppyDiskIcon /> {saveMutation.isPending ? "Saving…" : "Save translation"}
             </Button>
           </form>
         </CardContent>

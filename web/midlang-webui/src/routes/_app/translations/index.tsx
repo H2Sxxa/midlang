@@ -20,6 +20,7 @@ export const Route = createFileRoute("/_app/translations/")({
 function TranslationListPage() {
   const auth = useAuth()
   const [locale, setLocale] = useState("")
+  const [localeDraft, setLocaleDraft] = useState("")
   const [keyword, setKeyword] = useState("")
   const [appliedKeyword, setAppliedKeyword] = useState("")
   const [order, setOrder] = useState<SortOrder>("asc")
@@ -30,6 +31,7 @@ function TranslationListPage() {
   const handleSearch = (event: SubmitEvent) => {
     event.preventDefault()
     setAppliedKeyword(keyword.trim())
+    setLocale(localeDraft.trim())
   }
 
   return (
@@ -54,8 +56,8 @@ function TranslationListPage() {
               <Input
                 id="locale"
                 placeholder="en-US"
-                value={locale}
-                onChange={(event) => setLocale(event.target.value)}
+                value={localeDraft}
+                onChange={(event) => setLocaleDraft(event.target.value)}
               />
             ) : (
               <Select

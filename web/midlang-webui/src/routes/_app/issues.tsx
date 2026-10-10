@@ -1,45 +1,35 @@
 import {
   ArrowCounterClockwiseIcon,
-  CaretRightIcon,
   CheckCircleIcon,
   EyeSlashIcon,
   MagnifyingGlassIcon,
 } from "@phosphor-icons/react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useState, type SubmitEvent } from "react"
+import { FilterSelect } from "@/components/filter-select"
+import { LoadMore } from "@/components/load-more"
+import { OrderButton } from "@/components/order-button"
+import { StateBadge } from "@/components/state-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/hooks/use-auth"
 import {
   useIssues,
   type Issue,
   type IssueKind,
-  type IssueOrder,
   type IssueSort,
   type IssueState,
 } from "@/hooks/use-issues"
 import { useToast } from "@/hooks/use-toast"
 import { formatTimestamp } from "@/lib/format"
+import type { SelectOption, SortOrder } from "@/lib/query"
 
 export const Route = createFileRoute("/_app/issues")({
   component: IssuesPage,
 })
-
-type SelectOption = {
-  readonly value: string
-  readonly label: string
-}
 
 const STATE_OPTIONS: ReadonlyArray<SelectOption> = [
   { value: "", label: "All states" },
@@ -60,63 +50,6 @@ const SORT_OPTIONS: ReadonlyArray<SelectOption> = [
   { value: "count", label: "Count" },
 ]
 
-const ORDER_OPTIONS: ReadonlyArray<SelectOption> = [
-  { value: "desc", label: "Descending" },
-  { value: "asc", label: "Ascending" },
-]
-
-function stateVariant(state: string): "default" | "secondary" | "outline" {
-  if (state === "open") {
-    return "default"
-  }
-  if (state === "closed") {
-    return "secondary"
-  }
-  return "outline"
-}
-
-function FilterSelect({
-  id,
-  label,
-  placeholder,
-  value,
-  options,
-  onChange,
-}: {
-  readonly id: string
-  readonly label: string
-  readonly placeholder: string
-  readonly value: string
-  readonly options: ReadonlyArray<SelectOption>
-  readonly onChange: (value: string) => void
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <Select
-        items={options}
-        value={value}
-        onValueChange={(next) => {
-          if (next !== null) {
-            onChange(next)
-          }
-        }}
-      >
-        <SelectTrigger id={id} className="w-44">
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  )
-}
-
 function IssuesPage() {
   const auth = useAuth()
   const toast = useToast()
@@ -125,7 +58,7 @@ function IssuesPage() {
   const [state, setState] = useState<IssueState | "">("")
   const [kind, setKind] = useState<IssueKind | "">("")
   const [sort, setSort] = useState<IssueSort>("last_seen")
-  const [order, setOrder] = useState<IssueOrder>("desc")
+  const [order, setOrder] = useState<SortOrder>("desc")
   const issues = useIssues({ keyword: appliedKeyword, state, kind, sort, order })
   const items = issues.listQuery.data?.pages.flatMap((page) => page.items) ?? []
   const canManage = auth.can("diagnostic:manage")
@@ -208,14 +141,7 @@ function IssuesPage() {
             options={SORT_OPTIONS}
             onChange={(value) => setSort(value as IssueSort)}
           />
-          <FilterSelect
-            id="order"
-            label="Order"
-            placeholder="Descending"
-            value={order}
-            options={ORDER_OPTIONS}
-            onChange={(value) => setOrder(value as IssueOrder)}
-          />
+          <OrderButton id="order" order={order} onChange={setOrder} />
         </CardContent>
       </Card>
 
@@ -257,7 +183,7 @@ function IssuesPage() {
                         <TableCell className="text-right tabular-nums">{issue.count}</TableCell>
                         <TableCell className="text-muted-foreground">{formatTimestamp(issue.last_seen)}</TableCell>
                         <TableCell>
-                          <Badge variant={stateVariant(issue.state)}>{issue.state}</Badge>
+                          <StateBadge state={issue.state} />
                         </TableCell>
                         {canManage && (
                           <TableCell className="text-right">
@@ -303,15 +229,11 @@ function IssuesPage() {
                   </TableBody>
                 </Table>
               </div>
-              <div className="mt-4 flex justify-center">
-                <Button
-                  variant="outline"
-                  disabled={!issues.listQuery.hasNextPage || issues.listQuery.isFetchingNextPage}
-                  onClick={() => void issues.listQuery.fetchNextPage()}
-                >
-                  {issues.listQuery.isFetchingNextPage ? "Loading…" : "Load more"} <CaretRightIcon />
-                </Button>
-              </div>
+              <LoadMore
+                hasNextPage={issues.listQuery.hasNextPage}
+                isFetching={issues.listQuery.isFetchingNextPage}
+                onLoadMore={() => void issues.listQuery.fetchNextPage()}
+              />
             </>
           )}
         </CardContent>

@@ -62,13 +62,14 @@ statistics stay current instead of being recomputed on demand.
 ## Status
 
 MidLang is early. The store, the HTTP translation API and the admin console
-exist; deployment hardening, bulk import, the diagnostics APIs and export are
-still ahead.
+exist; deployment hardening, bulk import, the coverage API and export are still
+ahead.
 
 - **Working now** — a redb-backed store with paged listing and statistics,
   authenticated translation read/write/delete over HTTP, opaque bearer tokens
-  with permission groups, and missing-key issues plus a per-key changelog.
+  with permission groups, missing-key issues, and a queryable changelog with
+  one-step rollback.
 - **In progress** — configurable deployment and packaging, initial bulk import,
-  and the issues/changelog/coverage read APIs.
+  and the coverage read API.
 - **Planned** — the SDK, versioned export, the offline runtime, and plurals/ICU
   in the value model.

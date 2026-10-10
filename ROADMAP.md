@@ -34,19 +34,20 @@ then versioned offline export is a derived capability over the same store.
   `CoverageReporter` keeps incremental coverage state in SQLite; a
   `StoreObserver` publishes committed writes to it. Issues are reported by
   missing translation reads, while changelog entries are recorded by
-  translation mutations.
+  translation mutations and can be listed, filtered and rolled back.
 - `crates/server`: `HttpServer` with axum routes `/health` and authenticated
   translation read/write/delete routes at `/t/{locale}/{key}` and
-  `/t/{locale}/{namespace}/{key}`. `secure` persists opaque bearer tokens and
-  permission groups in SQLite; reads require `translation:read`, writes require
-  `translation:write`, and deletes require `translation:delete`. Responses use
-  message objects (`locale`, `key`, `value`). `main.rs` assembles
+  `/t/{locale}/{namespace}/{key}`. Recorded changes are listed at `/changelog`
+  and reverted at `/changelog/{id}/rollback`. `secure` persists opaque bearer
+  tokens and permission groups in SQLite; reads require `translation:read`,
+  writes require `translation:write`, and deletes require `translation:delete`.
+  Responses use message objects (`locale`, `key`, `value`). `main.rs` assembles
   store/internal/auth/translation and binds `127.0.0.1` with a configurable
   port. `/health` is still only a liveness endpoint; readiness checks are not
   implemented.
 - `crates/intl`: empty. `uds`, `rpc`, `grpc`: placeholders.
 - `web/midlang-webui`: login, overview and settings shell without data views.
-- Missing: no initial import, no issues/changelog/coverage read API, no SDK, no
+- Missing: no initial import, no coverage read API, no SDK, no
   deployment config, no versioning or export. Coverage is maintained only when
   enabled and is not exposed over HTTP yet. Token administration APIs and
   resource scopes are also still pending.
@@ -88,7 +89,8 @@ Goal: deliver the core online value, explaining translation problems.
 
 - Issues API: missing keys grouped by locale/namespace/key with first/last seen
   and counts.
-- Changelog API: per-key history (`origin`, `state`) plus rollback.
+- Changelog API: per-key history (`state`, `previous_value`/`new_value`) plus
+  rollback.
 - Coverage API: per-locale coverage against a reference locale plus a paged
   missing-key listing, maintained incrementally rather than recomputed.
 - A minimal view (web UI or CLI) to see what is missing, what changed and how to

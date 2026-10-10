@@ -96,6 +96,30 @@ impl InternalService {
         Ok(())
     }
 
+    /// Lists recorded changes. An [InternalService] without a changelog
+    /// recorder holds no changes, so the listing is empty rather than an error.
+    pub async fn list_changes(
+        &self,
+        cursor: &changelog::ChangelogCursor,
+        limit: usize,
+    ) -> Result<changelog::ChangelogPage> {
+        match &self.changelog {
+            Some(recorder) => recorder.list(cursor, limit).await,
+            None => Ok(changelog::ChangelogPage {
+                items: Vec::new(),
+                next: None,
+            }),
+        }
+    }
+
+    /// Loads one recorded change by its id.
+    pub async fn change(&self, id: i64) -> Result<Option<changelog::ChangeRecord>> {
+        match &self.changelog {
+            Some(recorder) => recorder.get(id).await,
+            None => Ok(None),
+        }
+    }
+
     /// Lists reported issues. An [InternalService] without an issue collector
     /// holds no issues, so the listing is empty rather than an error.
     pub async fn list_issues(

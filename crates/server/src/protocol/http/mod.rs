@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 pub mod auth;
+pub mod changelog;
 pub mod health;
 pub mod issue;
 pub mod openapi;
@@ -34,6 +35,7 @@ where
         .merge(store::router::<Store>())
         .merge(translate::router::<Store>())
         .merge(issue::router::<Store>())
+        .merge(changelog::router::<Store>())
         .layer(from_fn_with_state(auth_store, secure::middleware));
 
     let cors = if cors_origins.is_empty() {

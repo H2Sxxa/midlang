@@ -1,19 +1,17 @@
-import {
-  CaretRightIcon,
-  MagnifyingGlassIcon,
-  PencilSimpleIcon,
-  PlusIcon,
-} from "@phosphor-icons/react"
+import { MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon } from "@phosphor-icons/react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useState, type SubmitEvent } from "react"
+import { LoadMore } from "@/components/load-more"
+import { OrderButton } from "@/components/order-button"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useTranslation, type TranslationOrder } from "@/hooks/use-translation"
 import { useAuth } from "@/hooks/use-auth"
+import { useTranslation } from "@/hooks/use-translation"
+import type { SortOrder } from "@/lib/query"
 
 export const Route = createFileRoute("/_app/translations/")({
   component: TranslationListPage,
@@ -24,7 +22,7 @@ function TranslationListPage() {
   const [locale, setLocale] = useState("")
   const [keyword, setKeyword] = useState("")
   const [appliedKeyword, setAppliedKeyword] = useState("")
-  const [order, setOrder] = useState<TranslationOrder>("asc")
+  const [order, setOrder] = useState<SortOrder>("asc")
   const translation = useTranslation({ locale, keyword: appliedKeyword, order })
   const { locales, selectedLocale } = translation
   const entries = translation.listQuery.data?.pages.flatMap((page) => page.items) ?? []
@@ -42,7 +40,9 @@ function TranslationListPage() {
           <p className="mt-1 text-muted-foreground">Search and browse translation resources.</p>
         </div>
         {auth.can("translation:write") && (
-          <Button nativeButton={false} render={<Link to="/translations/new" />}><PlusIcon /> Add translation</Button>
+          <Button nativeButton={false} render={<Link to="/translations/new" />}>
+            <PlusIcon /> Add translation
+          </Button>
         )}
       </div>
 
@@ -51,7 +51,12 @@ function TranslationListPage() {
           <div className="flex flex-1 flex-col gap-1.5">
             <Label htmlFor="locale">Locale</Label>
             {locales.length === 0 ? (
-              <Input id="locale" placeholder="en-US" value={locale} onChange={(event) => setLocale(event.target.value)} />
+              <Input
+                id="locale"
+                placeholder="en-US"
+                value={locale}
+                onChange={(event) => setLocale(event.target.value)}
+              />
             ) : (
               <Select
                 value={selectedLocale}
@@ -65,7 +70,11 @@ function TranslationListPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {locales.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+                  {locales.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             )}
@@ -73,36 +82,29 @@ function TranslationListPage() {
           <form className="flex flex-2 gap-2" onSubmit={handleSearch}>
             <div className="relative flex-1">
               <MagnifyingGlassIcon className="absolute top-2 left-2.5 size-4 text-muted-foreground" />
-              <Input className="pl-8" placeholder="Search keys or values" value={keyword} onChange={(event) => setKeyword(event.target.value)} />
+              <Input
+                className="pl-8"
+                placeholder="Search keys or values"
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+              />
             </div>
-            <Button type="submit" variant="outline">Search</Button>
+            <Button type="submit" variant="outline">
+              Search
+            </Button>
           </form>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="order">Order</Label>
-            <Select
-              value={order}
-              onValueChange={(next) => {
-                if (next === "asc" || next === "desc") {
-                  setOrder(next)
-                }
-              }}
-            >
-              <SelectTrigger id="order" className="w-24">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="asc">A → Z</SelectItem>
-                <SelectItem value="desc">Z → A</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <OrderButton id="order" order={order} onChange={setOrder} />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
           <CardTitle>{selectedLocale || "Translation entries"}</CardTitle>
-          <CardDescription>{appliedKeyword ? `Results matching “${appliedKeyword}”.` : "All entries for the selected locale."}</CardDescription>
+          <CardDescription>
+            {appliedKeyword
+              ? `Results matching “${appliedKeyword}”.`
+              : "All entries for the selected locale."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {translation.listQuery.isError ? (
@@ -110,12 +112,20 @@ function TranslationListPage() {
           ) : translation.listQuery.isLoading ? (
             <p className="py-8 text-sm text-muted-foreground">Loading translations…</p>
           ) : selectedLocale === "" ? (
-            <p className="py-8 text-sm text-muted-foreground">Create a translation to add the first locale.</p>
+            <p className="py-8 text-sm text-muted-foreground">
+              Create a translation to add the first locale.
+            </p>
           ) : (
             <>
               <div className="rounded-md border">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Key</TableHead><TableHead>Value</TableHead><TableHead className="w-20 text-right">Edit</TableHead></TableRow></TableHeader>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Key</TableHead>
+                      <TableHead>Value</TableHead>
+                      <TableHead className="w-20 text-right">Edit</TableHead>
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
                     {entries.map((item) => (
                       <TableRow key={item.key}>
@@ -123,20 +133,35 @@ function TranslationListPage() {
                         <TableCell className="max-w-xl whitespace-normal">{item.value}</TableCell>
                         <TableCell className="text-right">
                           {auth.can("translation:read") && (
-                            <Button nativeButton={false} size="icon-sm" variant="ghost" aria-label={`Edit ${item.key}`} render={<Link to="/translations/$locale/$key" params={{ locale: selectedLocale, key: item.key }} />}><PencilSimpleIcon /></Button>
+                            <Button
+                              nativeButton={false}
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label={`Edit ${item.key}`}
+                              render={
+                                <Link
+                                  to="/translations/$locale/$key"
+                                  params={{ locale: selectedLocale, key: item.key }}
+                                />
+                              }
+                            >
+                              <PencilSimpleIcon />
+                            </Button>
                           )}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-                {entries.length === 0 && <p className="px-4 py-8 text-sm text-muted-foreground">No matching translations.</p>}
+                {entries.length === 0 && (
+                  <p className="px-4 py-8 text-sm text-muted-foreground">No matching translations.</p>
+                )}
               </div>
-              <div className="mt-4 flex justify-center">
-                <Button variant="outline" disabled={!translation.listQuery.hasNextPage || translation.listQuery.isFetchingNextPage} onClick={() => void translation.listQuery.fetchNextPage()}>
-                  {translation.listQuery.isFetchingNextPage ? "Loading…" : "Load more"} <CaretRightIcon />
-                </Button>
-              </div>
+              <LoadMore
+                hasNextPage={translation.listQuery.hasNextPage}
+                isFetching={translation.listQuery.isFetchingNextPage}
+                onLoadMore={() => void translation.listQuery.fetchNextPage()}
+              />
             </>
           )}
         </CardContent>

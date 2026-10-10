@@ -8,14 +8,14 @@ import {
 } from "@tanstack/react-query"
 import type { components } from "@/api/generated"
 import { useClient } from "@/hooks/use-client"
+import type { SortOrder } from "@/lib/query"
 
 export type TranslationListPage = components["schemas"]["TranslationListPage"]
-export type TranslationOrder = "asc" | "desc"
 
 type TranslationOptions = {
   readonly locale: string
   readonly keyword: string
-  readonly order: TranslationOrder
+  readonly order: SortOrder
   readonly key?: string
 }
 

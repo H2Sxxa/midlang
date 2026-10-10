@@ -7,13 +7,13 @@ import {
 } from "@tanstack/react-query"
 import type { components } from "@/api/generated"
 import { useClient } from "@/hooks/use-client"
+import type { SortOrder } from "@/lib/query"
 
 export type Issue = components["schemas"]["IssueMessage"]
 export type IssueListPage = components["schemas"]["IssueListPage"]
 
 export type IssueState = "open" | "closed" | "ignored"
 export type IssueSort = "last_seen" | "created_at" | "count"
-export type IssueOrder = "asc" | "desc"
 export type IssueKind = string
 
 export const ISSUE_STATES: ReadonlyArray<IssueState> = ["open", "closed", "ignored"]
@@ -24,7 +24,7 @@ type IssueOptions = {
   readonly state: IssueState | ""
   readonly kind: IssueKind | ""
   readonly sort: IssueSort
-  readonly order: IssueOrder
+  readonly order: SortOrder
 }
 
 type SetStateInput = {

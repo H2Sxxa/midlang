@@ -44,7 +44,12 @@ export const navSections: ReadonlyArray<NavSection> = [
     items: [
       { to: "/issues", label: "Issues", icon: WarningCircleIcon },
       { to: "/coverage", label: "Coverage", icon: ChartBarIcon },
-      { to: "/changelog", label: "Changelog", icon: ClockCounterClockwiseIcon },
+      {
+        to: "/changelog",
+        label: "Changelog",
+        icon: ClockCounterClockwiseIcon,
+        permission: "diagnostic:read",
+      },
     ],
   },
   {

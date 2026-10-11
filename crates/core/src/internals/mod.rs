@@ -3,8 +3,10 @@ use std::{path::Path, sync::Arc};
 use anyhow::Result;
 use sqlx::{Sqlite, SqlitePool, migrate::MigrateDatabase};
 
+use crate::coverage::CoverageReport;
 use crate::internals::changelog::ChangelogRecorder;
-use crate::store::StoreObserver;
+use crate::query::Page;
+use crate::store::{KVRead, StoreObserver};
 
 pub mod changelog;
 pub mod coverage;
@@ -149,6 +151,48 @@ impl InternalService {
         match &self.issue {
             Some(collector) => collector.set_state(id, state).await,
             None => Ok(false),
+        }
+    }
+
+    /// Measures how much of the `reference` locale every other locale
+    /// translates.
+    ///
+    /// Coverage is maintained only when the service was built with
+    /// [`ServiceOptions::coverage`]. Without it there is no state to answer
+    /// from, so the call fails instead of falling back to a full store scan.
+    pub async fn coverage_report<S>(&self, store: &S, reference: &str) -> Result<CoverageReport>
+    where
+        S: KVRead + ?Sized,
+    {
+        match &self.coverage {
+            Some(reporter) => Ok((*reporter.report(store, reference).await?).clone()),
+            None => Err(coverage::CoverageError::Disabled.into()),
+        }
+    }
+
+    /// One page of the `reference` keys `locale` does not translate.
+    pub async fn coverage_missing_keys(
+        &self,
+        reference: &str,
+        locale: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<Page<String, String>> {
+        match &self.coverage {
+            Some(reporter) => {
+                reporter
+                    .missing_keys(reference, locale, cursor, limit)
+                    .await
+            }
+            None => Err(coverage::CoverageError::Disabled.into()),
+        }
+    }
+
+    /// Every locale coverage knows about, in ascending order.
+    pub async fn coverage_locales(&self) -> Result<Vec<String>> {
+        match &self.coverage {
+            Some(reporter) => reporter.locales().await,
+            None => Err(coverage::CoverageError::Disabled.into()),
         }
     }
 }

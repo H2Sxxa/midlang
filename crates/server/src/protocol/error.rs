@@ -4,6 +4,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use midlang_core::internals::coverage::CoverageError;
 use midlang_core::store::StoreError;
 use serde::Serialize;
 
@@ -45,6 +46,19 @@ pub fn conflict(message: impl Into<String>) -> Response {
         StatusCode::CONFLICT,
         Json(ErrorBody {
             code: "conflict",
+            message: message.into(),
+        }),
+    )
+        .into_response()
+}
+
+/// The server has this capability but it is not enabled. The request itself is
+/// well-formed, so the client has to change the deployment rather than retry.
+pub fn unavailable(message: impl Into<String>) -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ErrorBody {
+            code: "unavailable",
             message: message.into(),
         }),
     )
@@ -95,4 +109,19 @@ pub fn diagnostics(err: Error) -> Response {
         }),
     )
         .into_response()
+}
+
+/// Maps a coverage failure: a server without coverage tracking is a `503`, an
+/// unknown reference locale is a `404`, everything else is a `500` logged with
+/// its full error chain.
+pub fn coverage(err: Error) -> Response {
+    if let Some(CoverageError::Disabled) = err.downcast_ref::<CoverageError>() {
+        return unavailable("coverage tracking is not enabled on this server");
+    }
+    match err.downcast_ref::<StoreError>() {
+        Some(StoreError::LocaleNotExist(locale)) => {
+            not_found(format!("locale '{locale}' does not exist"))
+        }
+        _ => diagnostics(err),
+    }
 }

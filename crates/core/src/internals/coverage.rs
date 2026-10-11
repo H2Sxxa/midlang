@@ -32,6 +32,9 @@ pub enum CoverageError {
         present: usize,
         reference_keys: usize,
     },
+    /// The service was built without coverage tracking, so there is no
+    /// maintained state to answer from.
+    Disabled,
 }
 
 impl Display for CoverageError {
@@ -44,6 +47,9 @@ impl Display for CoverageError {
                 f,
                 "coverage state is inconsistent: {present} translated keys against {reference_keys} reference keys"
             ),
+            CoverageError::Disabled => {
+                write!(f, "coverage tracking is not enabled on this server")
+            }
         }
     }
 }
@@ -367,6 +373,17 @@ impl CoverageReporter {
             None
         };
         Ok(Page { items: rows, next })
+    }
+
+    /// Every locale coverage knows about, in ascending order. This is the set
+    /// the console offers as reference locales.
+    pub async fn locales(&self) -> Result<Vec<String>> {
+        self.flush().await?;
+        Ok(
+            sqlx::query_scalar("SELECT locale FROM midlang_locales ORDER BY locale")
+                .fetch_all(&self.pool)
+                .await?,
+        )
     }
 
     async fn count_keys(&self, locale_id: i64) -> Result<usize> {

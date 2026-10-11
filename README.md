@@ -167,6 +167,7 @@ pnpm dev
 - Permission groups and bearer tokens
 - Missing-key issues
 - Per-key changelog
+- Coverage against a reference locale
 - Locale listing, store statistics, and OpenAPI/Swagger UI
 - React administration console
 
@@ -174,7 +175,6 @@ pnpm dev
 
 - Deployment and packaging improvements
 - Bulk import and export
-- Public issue, changelog, and coverage APIs
 - Versioned export artifacts and offline runtime
 - SDKs
 - Plural and ICU message support

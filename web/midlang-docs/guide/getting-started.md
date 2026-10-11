@@ -22,10 +22,13 @@ The server binds `127.0.0.1:4321` by default. Useful flags:
 | `--store-url` | Redb file path, `translation.rdb` by default. |
 | `--sqlite-url` | Shared SQLite database for auth, issues, changelog and coverage. |
 | `--cors-origin` | Allowed origins; repeat or comma-separate. Defaults to all origins for local development. |
-| `--coverage` | Maintain per-locale coverage. Off by default because it costs one scan of the store at startup. |
+| `--coverage` | Maintain per-locale coverage. On by default; pass `--coverage false` to skip the startup scan, which also disables the coverage API. |
 
 On the first start the server creates an admin token and prints it once. Store
 it before the process exits; it is not shown again.
+
+The coverage endpoints answer `503` while `--coverage` is off, because there is
+no maintained state to read.
 
 ## Open the admin console
 
@@ -50,6 +53,16 @@ curl -H "Authorization: Bearer $MIDLANG_TOKEN" \
 
 Keys can be namespaced, which yields a second route shape:
 `/t/{locale}/{namespace}/{key}`.
+
+Coverage is read under the `diagnostic:read` permission, measured against a
+reference locale:
+
+```bash
+curl -H "Authorization: Bearer $MIDLANG_TOKEN" \
+  http://127.0.0.1:4321/coverage/en
+curl -H "Authorization: Bearer $MIDLANG_TOKEN" \
+  "http://127.0.0.1:4321/coverage/en/de/missing?limit=50"
+```
 
 ## Next
 

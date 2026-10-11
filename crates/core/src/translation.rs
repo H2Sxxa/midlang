@@ -1,9 +1,11 @@
 use crate::{
+    coverage::CoverageReport,
     internals::{
         InternalService,
         changelog::{ChangeRecord, Changelog, ChangelogCursor, ChangelogPage},
         issues::{IssueCursor, IssuePage, IssueRecord, IssueState, TranslationIssue},
     },
+    query::Page,
     store::{KVCursor, KVPage, KVRead, KVStore, StoreError, ValueState},
 };
 
@@ -118,6 +120,33 @@ where
     /// Loads one recorded change by its id.
     pub async fn change(&self, id: i64) -> Result<Option<ChangeRecord>> {
         self.internal_service.change(id).await
+    }
+
+    /// Measures how much of the `reference` locale every other locale
+    /// translates. The server has to be running with coverage tracking on.
+    pub async fn coverage(&self, reference: &str) -> Result<CoverageReport> {
+        self.internal_service
+            .coverage_report(&self.store, reference)
+            .await
+    }
+
+    /// One page of the `reference` keys `locale` does not translate, in
+    /// ascending key order and resuming after `cursor`.
+    pub async fn missing_keys(
+        &self,
+        reference: &str,
+        locale: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<Page<String, String>> {
+        self.internal_service
+            .coverage_missing_keys(reference, locale, cursor, limit)
+            .await
+    }
+
+    /// Every locale coverage knows about, in ascending order.
+    pub async fn coverage_locales(&self) -> Result<Vec<String>> {
+        self.internal_service.coverage_locales().await
     }
 }
 

@@ -36,9 +36,11 @@ pub struct Args {
     /// Whether to enable changelog.
     #[arg(long, default_value_t = true)]
     pub changelog: bool,
-    /// Whether to maintain per-locale translation coverage in SQLite. Costs one
-    /// scan of the store at startup; writes afterwards are incremental.
-    #[arg(long, default_value_t = false)]
+    /// Whether to maintain per-locale translation coverage in SQLite. On by
+    /// default because the coverage API reads that state; pass
+    /// `--coverage false` to skip the startup scan. Costs one scan of the store
+    /// at startup; writes afterwards are incremental.
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     pub coverage: bool,
 }
 

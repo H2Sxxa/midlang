@@ -164,6 +164,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/coverage/locales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["locales_handler"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/coverage/{reference}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["coverage_handler"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/coverage/{reference}/{locale}/missing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["missing_keys_handler"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -299,6 +347,28 @@ export interface components {
             previous_value?: string | null;
             state: string;
         };
+        /** @description The locales coverage can measure. */
+        CoverageLocales: {
+            /** @description Locales coverage knows about, in ascending order. */
+            locales: string[];
+        };
+        /** @description How much of the reference locale every other locale translates. */
+        CoverageMessage: {
+            /**
+             * Format: double
+             * @description `Σpresent / (locales × reference_keys)`; `1.0` when there is nothing to
+             *     translate.
+             */
+            overall: number;
+            /** @description Coverage per locale; the reference itself is not a row. */
+            per_locale: {
+                [key: string]: components["schemas"]["LocaleCoverageMessage"];
+            };
+            /** @description The locale that defines the key universe. */
+            reference: string;
+            /** @description Keys the reference locale translates. */
+            reference_keys: number;
+        };
         CreateGroupRequest: {
             description: string;
             name: string;
@@ -350,6 +420,26 @@ export interface components {
             payload: unknown;
             state: string;
             summary: string;
+        };
+        /** @description One locale's coverage measured against the reference locale. */
+        LocaleCoverageMessage: {
+            /** @description `reference_keys - present`. */
+            missing: number;
+            /** @description Reference keys this locale translates with a non-empty value. */
+            present: number;
+            /**
+             * Format: double
+             * @description `present` over the report's `reference_keys`; `1.0` when the reference
+             *     translates no keys.
+             */
+            ratio: number;
+        };
+        /** @description One page of the reference keys a locale does not translate. */
+        MissingKeysPage: {
+            /** @description Untranslated keys, in ascending key order. */
+            items: string[];
+            /** @description Key to resume after on the next page, if one exists. */
+            next?: string | null;
         };
         PermissionInfo: {
             description: string;
@@ -1271,6 +1361,214 @@ export interface operations {
             };
             /** @description Rollback unavailable */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    locales_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Locales coverage knows about */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverageLocales"];
+                };
+            };
+            /** @description Missing or invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Coverage unavailable */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Coverage tracking is not enabled */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    coverage_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Locale that defines the key universe */
+                reference: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Coverage of every other locale against the reference */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverageMessage"];
+                };
+            };
+            /** @description Missing or invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Reference locale not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Coverage unavailable */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Coverage tracking is not enabled */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    missing_keys_handler: {
+        parameters: {
+            query?: {
+                /** @description Number of keys to return. Defaults to 100. */
+                limit?: number;
+                /** @description Key returned as `next` by the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Locale that defines the key universe */
+                reference: string;
+                /** @description Locale the untranslated keys are listed for */
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged untranslated keys */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissingKeysPage"];
+                };
+            };
+            /** @description Invalid query */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Missing or invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Reference locale not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Coverage unavailable */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Coverage tracking is not enabled */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

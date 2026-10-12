@@ -1,0 +1,12 @@
+[package]
+name = "midlang-preset"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "midlang-preset"
+path = "src/main.rs"
+
+[dependencies]
+midlang-core = { path = "../core" }
+anyhow.workspace = true

@@ -977,6 +977,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "midlang-preset"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "midlang-core",
+]
+
+[[package]]
 name = "midlang-server"
 version = "0.1.0"
 dependencies = [

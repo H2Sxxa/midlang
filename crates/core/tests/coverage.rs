@@ -1,12 +1,17 @@
 use midlang_core::{
     coverage::{coverage, missing_keys},
-    store::{KVRead, KVStore, RedbStore, StoreError},
+    store::{KVCursor, KVRead, KVStore, RedbStore, StoreError},
 };
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+
+/// First-page cursor of a missing-keys listing.
+fn first_page() -> KVCursor {
+    KVCursor::first()
+}
 
 fn seeded_store(tag: &str, entries: &[(&str, &str, &str)]) -> (RedbStore, PathBuf) {
     let nanos = SystemTime::now()
@@ -82,7 +87,7 @@ fn missing_keys_are_listed_per_locale_in_reference_order() {
         assert_eq!(locale_coverage.missing, 2);
         assert_eq!(locale_coverage.ratio, 1.0 / 3.0);
 
-        let listed = missing_keys(&store, "en", locale, None, 10).unwrap();
+        let listed = missing_keys(&store, "en", locale, &first_page(), 10).unwrap();
         assert_eq!(
             listed.items,
             vec!["app.footer".to_string(), "app.subtitle".to_string()]
@@ -113,7 +118,7 @@ fn a_locale_that_translates_nothing_is_at_zero() {
     assert_eq!(fr.missing, 2);
     assert_eq!(fr.ratio, 0.0);
 
-    let listed = missing_keys(&store, "en", "fr", None, 10).unwrap();
+    let listed = missing_keys(&store, "en", "fr", &first_page(), 10).unwrap();
     assert_eq!(
         listed.items,
         vec!["app.subtitle".to_string(), "app.title".to_string()]
@@ -170,13 +175,25 @@ fn missing_keys_pages_after_the_cursor() {
         ],
     );
 
-    let first = missing_keys(&store, "en", "de", None, 2).unwrap();
+    let first = missing_keys(&store, "en", "de", &first_page(), 2).unwrap();
     assert_eq!(first.items, vec!["k2".to_string(), "k3".to_string()]);
-    assert_eq!(first.next, Some("k3".to_string()));
+    // The next page starts at the key after this one, which the page it names
+    // then begins with.
+    assert_eq!(
+        first
+            .next
+            .as_ref()
+            .and_then(|cursor| cursor.position.as_deref()),
+        Some("k4")
+    );
 
-    let second = missing_keys(&store, "en", "de", first.next.as_deref(), 2).unwrap();
+    let second = missing_keys(&store, "en", "de", first.next.as_ref().unwrap(), 2).unwrap();
     assert_eq!(second.items, vec!["k4".to_string()]);
     assert_eq!(second.next, None);
+
+    // A cursor is a place, so re-reading the first one lands on the first page.
+    let back = missing_keys(&store, "en", "de", &first_page(), 2).unwrap();
+    assert_eq!(back.items, first.items);
 
     std::fs::remove_file(path).unwrap();
 }

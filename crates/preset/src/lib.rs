@@ -1,5 +1,5 @@
 use anyhow::Result;
-use midlang_core::store::{KVCursor, KVStore, MemStore, QueryCursor, RedbStore, SortOrder};
+use midlang_core::store::{KVCursor, KVStore, MemStore, RedbStore, SortOrder};
 use std::path::Path;
 pub struct PresetBuilder {
     inner: Box<MemStore>,
@@ -27,9 +27,9 @@ impl PresetBuilder {
             .collect::<Vec<_>>();
         println!("Exporting locales: {:?}", locales);
         for locale in locales.iter() {
-            let mut cursor: KVCursor = QueryCursor::new(SortOrder::Asc, None);
+            let mut cursor: KVCursor = KVCursor::first();
             loop {
-                let page = inner.list(locale, &cursor, 1000)?;
+                let page = inner.list(locale, SortOrder::Asc, None, &cursor, 1000)?;
                 for entry in &page.items {
                     store.set(locale, &entry.key, &entry.value)?;
                 }

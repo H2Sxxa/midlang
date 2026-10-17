@@ -68,7 +68,14 @@ impl KVRead for MemStore {
         Ok(entries.get(key).cloned())
     }
 
-    fn list(&self, locale: &str, cursor: &KVCursor, limit: usize) -> Result<KVPage> {
+    fn list(
+        &self,
+        locale: &str,
+        order: SortOrder,
+        keyword: Option<&str>,
+        cursor: &KVCursor,
+        limit: usize,
+    ) -> Result<KVPage> {
         let data = self.read_data();
         let entries = data
             .get(locale)
@@ -81,40 +88,41 @@ impl KVRead for MemStore {
             });
         }
 
-        let keyword = cursor.filter.as_deref().map(str::to_lowercase);
+        let keyword = keyword.map(str::to_lowercase);
         let mut matching: Vec<(&String, &String)> = entries
             .iter()
-            .filter(|(key, _)| match (cursor.order, cursor.next.as_deref()) {
-                (SortOrder::Asc, Some(after)) => key.as_str() > after,
-                (SortOrder::Desc, Some(after)) => key.as_str() < after,
-                (_, None) => true,
-            })
             .filter(|(key, value)| {
                 keyword.as_ref().is_none_or(|keyword| {
                     key.to_lowercase().contains(keyword) || value.to_lowercase().contains(keyword)
                 })
             })
             .collect();
-
-        if cursor.order == SortOrder::Desc {
+        // The map is ascending, so a descending listing reads it backwards.
+        if order == SortOrder::Desc {
             matching.reverse();
         }
 
-        let more = matching.len() > limit;
-        let items: Vec<KVEntry> = matching
-            .into_iter()
+        // The page starts at the first row at (or, descending, before) the
+        // cursor's place, so a place a key was deleted at still reads on.
+        let start = match cursor.position.as_deref() {
+            Some(position) => match order {
+                SortOrder::Asc => matching.partition_point(|(key, _)| key.as_str() < position),
+                SortOrder::Desc => matching.partition_point(|(key, _)| key.as_str() > position),
+            },
+            None => 0,
+        };
+        let page = &matching[start..];
+
+        let items: Vec<KVEntry> = page
+            .iter()
             .take(limit)
             .map(|(key, value)| KVEntry {
-                key: key.clone(),
-                value: value.clone(),
+                key: (*key).clone(),
+                value: (*value).clone(),
             })
             .collect();
-        let next = more.then(|| KVCursor {
-            order: cursor.order,
-            filter: cursor.filter.clone(),
-            next: items.last().map(|entry| entry.key.clone()),
-        });
-
+        // The row past the page is where the page after this one starts.
+        let next = page.get(limit).map(|(key, _)| KVCursor::at((*key).clone()));
         Ok(KVPage { items, next })
     }
 

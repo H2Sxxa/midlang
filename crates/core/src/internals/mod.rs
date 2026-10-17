@@ -5,12 +5,13 @@ use sqlx::{Sqlite, SqlitePool, migrate::MigrateDatabase};
 
 use crate::coverage::CoverageReport;
 use crate::internals::changelog::ChangelogRecorder;
-use crate::query::Page;
-use crate::store::{KVRead, StoreObserver};
+use crate::query::{Page, SortOrder};
+use crate::store::{KVCursor, KVRead, StoreObserver};
 
 pub mod changelog;
 pub mod coverage;
 pub mod issues;
+pub mod place;
 pub mod schema;
 pub mod worker;
 
@@ -102,11 +103,13 @@ impl InternalService {
     /// recorder holds no changes, so the listing is empty rather than an error.
     pub async fn list_changes(
         &self,
+        filter: &changelog::ChangelogFilter,
+        order: SortOrder,
         cursor: &changelog::ChangelogCursor,
         limit: usize,
     ) -> Result<changelog::ChangelogPage> {
         match &self.changelog {
-            Some(recorder) => recorder.list(cursor, limit).await,
+            Some(recorder) => recorder.list(filter, order, cursor, limit).await,
             None => Ok(changelog::ChangelogPage {
                 items: Vec::new(),
                 next: None,
@@ -126,11 +129,13 @@ impl InternalService {
     /// holds no issues, so the listing is empty rather than an error.
     pub async fn list_issues(
         &self,
+        filter: &issues::IssueFilter,
+        order: SortOrder,
         cursor: &issues::IssueCursor,
         limit: usize,
     ) -> Result<issues::IssuePage> {
         match &self.issue {
-            Some(collector) => collector.list(cursor, limit).await,
+            Some(collector) => collector.list(filter, order, cursor, limit).await,
             None => Ok(issues::IssuePage {
                 items: Vec::new(),
                 next: None,
@@ -175,9 +180,9 @@ impl InternalService {
         &self,
         reference: &str,
         locale: &str,
-        cursor: Option<&str>,
+        cursor: &KVCursor,
         limit: usize,
-    ) -> Result<Page<String, String>> {
+    ) -> Result<Page<String, KVCursor>> {
         match &self.coverage {
             Some(reporter) => {
                 reporter

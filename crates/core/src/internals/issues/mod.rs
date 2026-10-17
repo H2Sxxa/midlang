@@ -1,5 +1,6 @@
+use crate::internals::place;
 use crate::internals::worker::{WorkState, Workable};
-use crate::query::{Page, QueryCursor, SortOrder};
+use crate::query::{Cursor, Page, SortOrder};
 use crate::time::unix_now;
 use anyhow::{Context, Ok, Result};
 use scc::HashMap;
@@ -122,8 +123,7 @@ impl IssueSort {
     }
 }
 
-/// Which issues a listing includes. It travels with the page cursor, so a
-/// resumed page cannot drift away from the filter that produced the first one.
+/// Which issues a listing includes.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IssueFilter {
     pub state: Option<IssueState>,
@@ -132,14 +132,15 @@ pub struct IssueFilter {
     pub sort: IssueSort,
 }
 
-/// Position of the last row of a page: its sort value plus the id tiebreaker.
+/// The place a page starts at in a listing that breaks ties on the id: the sort
+/// value of the row there plus that row's id.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IssuePosition {
     pub value: i64,
     pub id: String,
 }
 
-pub type IssueCursor = QueryCursor<IssueFilter, IssuePosition>;
+pub type IssueCursor = Cursor<IssuePosition>;
 
 /// One persisted issue row.
 #[derive(Debug, Clone, Serialize)]
@@ -195,6 +196,28 @@ fn sort_value(row: &IssueRow, sort: IssueSort) -> i64 {
         IssueSort::CreatedAt => row.created_at,
         IssueSort::Count => row.count,
     }
+}
+
+/// Restricts a listing to the issues from `position` onward: past the sort
+/// column, or tied on it and at or past the id.
+fn push_place(
+    builder: &mut QueryBuilder<Sqlite>,
+    column: &str,
+    order: SortOrder,
+    position: &IssuePosition,
+) {
+    builder
+        .push(" AND (")
+        .push(column)
+        .push(format!(" {} ", place::exclusive(order)))
+        .push_bind(position.value)
+        .push(" OR (")
+        .push(column)
+        .push(" = ")
+        .push_bind(position.value)
+        .push(format!(" AND id {} ", place::inclusive(order)))
+        .push_bind(position.id.clone())
+        .push("))");
 }
 
 pub struct IssueCollector {
@@ -326,9 +349,16 @@ impl IssueCollector {
         self.commit().await
     }
 
-    /// One page of issue rows for `cursor`, ordered by the cursor's sort field
-    /// and breaking ties on the id. `next` is `None` on the last page.
-    pub async fn list(&self, cursor: &IssueCursor, limit: usize) -> Result<IssuePage> {
+    /// One page of the issue rows `filter` keeps, ordered by `filter`'s sort
+    /// field and breaking ties on the id, from the place `cursor` names onward.
+    /// `next` is `None` on the last page.
+    pub async fn list(
+        &self,
+        filter: &IssueFilter,
+        order: SortOrder,
+        cursor: &IssueCursor,
+        limit: usize,
+    ) -> Result<IssuePage> {
         self.flush().await?;
         if limit == 0 {
             return Ok(IssuePage {
@@ -337,23 +367,55 @@ impl IssueCollector {
             });
         }
 
-        let column = cursor.filter.sort.column();
-        let comparison = match cursor.order {
-            SortOrder::Asc => ">",
-            SortOrder::Desc => "<",
+        // A page is the issues from its own place onward: the sort column
+        // decides first and the id breaks its ties.
+        let column = filter.sort.column();
+        let position_of = |row: &IssueRow| IssuePosition {
+            value: sort_value(row, filter.sort),
+            id: row.id.clone(),
         };
 
+        let mut builder = self.listing(filter);
+        if let Some(position) = &cursor.position {
+            push_place(&mut builder, column, order, position);
+        }
+        builder
+            .push(" ORDER BY ")
+            .push(column)
+            .push(format!(" {order}, id {order}"))
+            .push(" LIMIT ")
+            .push_bind(limit as i64 + 1);
+
+        let mut rows = builder
+            .build_query_as::<IssueRow>()
+            .fetch_all(&self.pool)
+            .await?;
+
+        // The row past the page is where the page after this one starts.
+        let next = rows.get(limit).map(position_of).map(IssueCursor::at);
+        rows.truncate(limit);
+
+        let items = rows
+            .into_iter()
+            .map(IssueRecord::try_from)
+            .collect::<Result<Vec<_>>>()?;
+        Ok(IssuePage { items, next })
+    }
+
+    /// The rows of a listing, filtered by `filter` and left unordered so a
+    /// caller can pick the place and the ordering it reads them in.
+    fn listing(&self, filter: &IssueFilter) -> QueryBuilder<Sqlite> {
         let mut builder = QueryBuilder::new(
             "SELECT id, kind, payload, summary, count, created_at, last_seen, state \
              FROM midlang_issues WHERE 1 = 1",
         );
-        if let Some(state) = cursor.filter.state {
+        if let Some(state) = filter.state {
             builder.push(" AND state = ").push_bind(state.to_string());
         }
-        if let Some(kind) = &cursor.filter.kind {
+        if let Some(kind) = &filter.kind {
             builder.push(" AND kind = ").push_bind(kind.clone());
         }
-        if let Some(keyword) = &cursor.filter.keyword {
+        if let Some(keyword) = &filter.keyword {
             let pattern = keyword.to_lowercase();
             builder
                 .push(" AND (instr(lower(summary), ")
@@ -364,52 +426,7 @@ impl IssueCollector {
                 .push_bind(pattern)
                 .push(") > 0)");
         }
-        if let Some(position) = &cursor.next {
-            builder
-                .push(" AND (")
-                .push(column)
-                .push(format!(" {comparison} "))
-                .push_bind(position.value)
-                .push(" OR (")
-                .push(column)
-                .push(" = ")
-                .push_bind(position.value)
-                .push(format!(" AND id {comparison} "))
-                .push_bind(position.id.clone())
-                .push("))");
-        }
         builder
-            .push(" ORDER BY ")
-            .push(column)
-            .push(format!(" {}, id {}", cursor.order, cursor.order))
-            .push(" LIMIT ")
-            .push_bind(limit as i64 + 1);
-
-        let mut rows = builder
-            .build_query_as::<IssueRow>()
-            .fetch_all(&self.pool)
-            .await?;
-
-        let next = if rows.len() > limit {
-            rows.truncate(limit);
-            let last = rows.last().expect("a truncated page is not empty");
-            Some(IssueCursor {
-                order: cursor.order,
-                filter: cursor.filter.clone(),
-                next: Some(IssuePosition {
-                    value: sort_value(last, cursor.filter.sort),
-                    id: last.id.clone(),
-                }),
-            })
-        } else {
-            None
-        };
-
-        let items = rows
-            .into_iter()
-            .map(IssueRecord::try_from)
-            .collect::<Result<Vec<_>>>()?;
-        Ok(IssuePage { items, next })
     }
 
     /// Loads one issue by its id.

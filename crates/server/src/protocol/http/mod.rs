@@ -13,12 +13,28 @@ use anyhow::Result;
 use axum::http::HeaderValue;
 use axum::serve::serve;
 use axum::{Router, middleware::from_fn_with_state, routing::any};
-use midlang_core::{store::KVStore, translation::Translation};
+use midlang_core::{query::Cursor, store::KVStore, translation::Translation};
+use serde::Serialize;
 use tokio::net::TcpListener;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::secure::{self, AuthStore};
+
+/// Encodes the next-page cursor of a listing as the token a response carries, or
+/// `None` on the last page.
+///
+/// A token is part of the protocol's vocabulary rather than the store's, so this
+/// lives with the HTTP layer while the cursor itself stays domain-neutral.
+pub fn next_token<N>(next: &Option<Cursor<N>>) -> Result<Option<String>>
+where
+    N: Serialize,
+{
+    match next {
+        Some(cursor) => Ok(Some(cursor.encode()?)),
+        None => Ok(None),
+    }
+}
 
 /// Builds the HTTP API router without binding a listener.
 ///

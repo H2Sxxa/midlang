@@ -35,7 +35,14 @@ impl KVRead for RedbStore {
         }
     }
 
-    fn list(&self, locale: &str, cursor: &KVCursor, limit: usize) -> Result<KVPage> {
+    fn list(
+        &self,
+        locale: &str,
+        order: SortOrder,
+        keyword: Option<&str>,
+        cursor: &KVCursor,
+        limit: usize,
+    ) -> Result<KVPage> {
         let tb = RedbTableDefinition::new(locale);
         let read_tx = self.db.begin_read()?;
         let table = match read_tx.open_table(tb) {
@@ -46,27 +53,24 @@ impl KVRead for RedbStore {
             Err(e) => return Err(e.into()),
         };
 
-        // Resume the scan right after the key of the previous page.
-        let bounds = match cursor.next.as_deref() {
-            None => (Bound::Unbounded, Bound::Unbounded),
-            Some(key) if cursor.order == SortOrder::Asc => {
-                (Bound::Excluded(key.to_string()), Bound::Unbounded)
-            }
-            Some(key) => (Bound::Unbounded, Bound::Excluded(key.to_string())),
-        };
-        let mut range = table.range(bounds)?;
+        if limit == 0 {
+            return Ok(KVPage {
+                items: Vec::new(),
+                next: None,
+            });
+        }
 
-        let keyword = cursor.filter.as_deref().map(str::to_lowercase);
-        let descending = cursor.order == SortOrder::Desc;
+        let keyword = keyword.map(str::to_lowercase);
+        let ascending = order == SortOrder::Asc;
+
+        // Read the page from the cursor's place onward, in the listing's order.
+        let mut range = table.range(page_bounds(order, cursor.position.as_deref()))?;
         let mut items: Vec<KVEntry> = Vec::with_capacity(limit);
-        let mut last: Option<String> = None;
-        let mut more = false;
-
-        // Read one match past the page to know whether a next page exists.
-        while let Some(item) = if descending {
-            range.next_back()
-        } else {
+        let mut next: Option<KVCursor> = None;
+        while let Some(item) = if ascending {
             range.next()
+        } else {
+            range.next_back()
         } {
             let (key_guard, value_guard) = item?;
             let key = key_guard.value().to_string();
@@ -78,26 +82,14 @@ impl KVRead for RedbStore {
             {
                 continue;
             }
+            // The row past the page is where the page after this one starts.
             if items.len() == limit {
-                more = true;
+                next = Some(KVCursor::at(key));
                 break;
             }
-            last = Some(key.clone());
             items.push(KVEntry { key, value });
         }
-
-        Ok(KVPage {
-            items,
-            next: if more {
-                last.map(|key| KVCursor {
-                    order: cursor.order,
-                    filter: cursor.filter.clone(),
-                    next: Some(key),
-                })
-            } else {
-                None
-            },
-        })
+        Ok(KVPage { items, next })
     }
 
     /// Counts every locale from table metadata, so the cost is O(#locales)
@@ -203,5 +195,20 @@ impl RedbStore {
     /// Adds an observer without removing existing observers.
     pub fn add_observer(&self, observer: Arc<dyn StoreObserver>) {
         self.observers.add(observer);
+    }
+}
+
+/// Bounds of a page read: the rows from the cursor's place onward, in the order
+/// the page is read, so the place is the first row of the page.
+fn page_bounds(order: SortOrder, position: Option<&str>) -> (Bound<String>, Bound<String>) {
+    match (order, position) {
+        (SortOrder::Asc, Some(position)) => {
+            (Bound::Included(position.to_string()), Bound::Unbounded)
+        }
+        (SortOrder::Asc, None) => (Bound::Unbounded, Bound::Unbounded),
+        (SortOrder::Desc, Some(position)) => {
+            (Bound::Unbounded, Bound::Included(position.to_string()))
+        }
+        (SortOrder::Desc, None) => (Bound::Unbounded, Bound::Unbounded),
     }
 }

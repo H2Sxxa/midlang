@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use sqlx::{QueryBuilder, SqlitePool};
+use sqlx::{QueryBuilder, Sqlite, SqlitePool};
 use std::fmt;
 
 use crate::{
-    query::{Page, QueryCursor, SortOrder},
+    internals::place,
+    query::{Cursor, Page, SortOrder},
     time::unix_now,
 };
 
@@ -104,8 +105,7 @@ pub struct ChangeRecord {
     pub created_at: i64,
 }
 
-/// Which entries a listing includes. It travels with the page cursor, so a
-/// resumed page cannot drift away from the filter that produced the first one.
+/// Which entries a changelog listing includes.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChangelogFilter {
     pub locale: Option<String>,
@@ -116,7 +116,7 @@ pub struct ChangelogFilter {
 /// Cursor of a changelog listing. Entries are ordered by id, which is unique and
 /// monotonic, so the position needs no tiebreaker: `created_at` only counts
 /// whole seconds and would collide.
-pub type ChangelogCursor = QueryCursor<ChangelogFilter, i64>;
+pub type ChangelogCursor = Cursor<i64>;
 
 pub type ChangelogPage = Page<ChangeRecord, ChangelogCursor>;
 
@@ -216,8 +216,15 @@ impl ChangelogRecorder {
         Ok(())
     }
 
-    /// One page of entries for `cursor`. `next` is `None` on the last page.
-    pub async fn list(&self, cursor: &ChangelogCursor, limit: usize) -> Result<ChangelogPage> {
+    /// One page of the entries `filter` keeps, ordered by `order` from the place
+    /// `cursor` names onward. `next` is `None` on the last page.
+    pub async fn list(
+        &self,
+        filter: &ChangelogFilter,
+        order: SortOrder,
+        cursor: &ChangelogCursor,
+        limit: usize,
+    ) -> Result<ChangelogPage> {
         if limit == 0 {
             return Ok(ChangelogPage {
                 items: Vec::new(),
@@ -225,22 +232,51 @@ impl ChangelogRecorder {
             });
         }
 
-        let comparison = match cursor.order {
-            SortOrder::Asc => ">",
-            SortOrder::Desc => "<",
-        };
+        // id is unique and monotonic, so a place needs no tiebreaker and a page
+        // is the ids from its own place onward.
+        let mut builder = self.listing(filter);
+        if let Some(position) = &cursor.position {
+            builder
+                .push(" AND id ")
+                .push(place::inclusive(order))
+                .push_bind(position);
+        }
+        builder
+            .push(" ORDER BY id ")
+            .push(order.to_string())
+            .push(" LIMIT ")
+            .push_bind(limit as i64 + 1);
 
+        let mut rows = builder
+            .build_query_as::<ChangeRow>()
+            .fetch_all(&self.pool)
+            .await?;
+
+        // The row past the page is where the page after this one starts.
+        let next = rows.get(limit).map(|row| ChangelogCursor::at(row.id));
+        rows.truncate(limit);
+
+        let items = rows
+            .into_iter()
+            .map(ChangeRecord::try_from)
+            .collect::<Result<Vec<_>>>()?;
+        Ok(ChangelogPage { items, next })
+    }
+
+    /// The rows of a listing, filtered by `filter` and left unordered so a
+    /// caller can pick the place and the ordering it reads them in.
+    fn listing(&self, filter: &ChangelogFilter) -> QueryBuilder<Sqlite> {
         let mut builder = QueryBuilder::new(
             "SELECT id, key, locale, state, previous_value, new_value, created_at \
              FROM midlang_changelog WHERE 1 = 1",
         );
-        if let Some(locale) = &cursor.filter.locale {
+        if let Some(locale) = &filter.locale {
             builder.push(" AND locale = ").push_bind(locale.clone());
         }
-        if let Some(state) = cursor.filter.state {
+        if let Some(state) = filter.state {
             builder.push(" AND state = ").push_bind(state.to_string());
         }
-        if let Some(keyword) = &cursor.filter.keyword {
+        if let Some(keyword) = &filter.keyword {
             let pattern = keyword.to_lowercase();
             builder
                 .push(" AND (instr(lower(key), ")
@@ -251,40 +287,7 @@ impl ChangelogRecorder {
                 .push_bind(pattern)
                 .push(") > 0)");
         }
-        if let Some(position) = cursor.next {
-            builder
-                .push(" AND id ")
-                .push(comparison)
-                .push_bind(position);
-        }
         builder
-            .push(" ORDER BY id ")
-            .push(cursor.order.to_string())
-            .push(" LIMIT ")
-            .push_bind(limit as i64 + 1);
-
-        let mut rows = builder
-            .build_query_as::<ChangeRow>()
-            .fetch_all(&self.pool)
-            .await?;
-
-        let next = if rows.len() > limit {
-            rows.truncate(limit);
-            let last = rows.last().expect("a truncated page is not empty");
-            Some(ChangelogCursor {
-                order: cursor.order,
-                filter: cursor.filter.clone(),
-                next: Some(last.id),
-            })
-        } else {
-            None
-        };
-
-        let items = rows
-            .into_iter()
-            .map(ChangeRecord::try_from)
-            .collect::<Result<Vec<_>>>()?;
-        Ok(ChangelogPage { items, next })
     }
 
     /// Loads one entry by its id.

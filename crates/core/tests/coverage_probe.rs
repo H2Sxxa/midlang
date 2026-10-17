@@ -54,40 +54,59 @@ impl KVRead for MemStore {
         }
     }
 
-    fn list(&self, locale: &str, cursor: &KVCursor, limit: usize) -> Result<KVPage> {
+    fn list(
+        &self,
+        locale: &str,
+        order: SortOrder,
+        keyword: Option<&str>,
+        cursor: &KVCursor,
+        limit: usize,
+    ) -> Result<KVPage> {
         let Some(table) = self.locales.get(locale) else {
             return Err(StoreError::LocaleNotExist(locale.to_string()).into());
         };
-        let start = match cursor.next.as_ref() {
-            Some(key) => Bound::Excluded(key.clone()),
-            None => Bound::Unbounded,
+        // The probe only ever walks a locale forward once, so it never needs a
+        // trail of cursors.
+        let ascending = order == SortOrder::Asc;
+        let bounds = match (order, cursor.position.as_ref()) {
+            (SortOrder::Asc, Some(position)) => {
+                (Bound::Included(position.clone()), Bound::Unbounded)
+            }
+            (SortOrder::Asc, None) => (Bound::Unbounded, Bound::Unbounded),
+            (SortOrder::Desc, Some(position)) => {
+                (Bound::Unbounded, Bound::Included(position.clone()))
+            }
+            (SortOrder::Desc, None) => (Bound::Unbounded, Bound::Unbounded),
         };
 
+        let keyword = keyword.map(str::to_lowercase);
+        let mut range = table.range(bounds);
         let mut items: Vec<KVEntry> = Vec::new();
-        let mut more = false;
-        for (key, value) in table.range((start, Bound::Unbounded)) {
+        let mut next: Option<KVCursor> = None;
+        loop {
+            let item = if ascending {
+                range.next()
+            } else {
+                range.next_back()
+            };
+            let Some((key, value)) = item else {
+                break;
+            };
+            let (key, value) = (key.clone(), value.clone());
+            if let Some(keyword) = &keyword
+                && !key.to_lowercase().contains(keyword)
+                && !value.to_lowercase().contains(keyword)
+            {
+                continue;
+            }
             if items.len() == limit {
-                more = true;
+                next = Some(KVCursor::at(key));
                 break;
             }
-            items.push(KVEntry {
-                key: key.clone(),
-                value: value.clone(),
-            });
+            items.push(KVEntry { key, value });
         }
 
-        Ok(KVPage {
-            next: if more {
-                items.last().map(|entry| KVCursor {
-                    order: SortOrder::Asc,
-                    filter: None,
-                    next: Some(entry.key.clone()),
-                })
-            } else {
-                None
-            },
-            items,
-        })
+        Ok(KVPage { next, items })
     }
 
     fn statistics(&self) -> Result<KVStatistics> {
@@ -123,9 +142,9 @@ where
     for locale in locales.keys().filter(|key| key.as_str() != reference) {
         covered.fill(false);
         let mut locale_present = 0usize;
-        let mut cursor = KVCursor::new(SortOrder::Asc, None);
+        let mut cursor = KVCursor::first();
         loop {
-            let page = store.list(locale, &cursor, PAGES)?;
+            let page = store.list(locale, SortOrder::Asc, None, &cursor, PAGES)?;
             for entry in page.items {
                 let Some(index) = index_of.get(entry.key.as_str()) else {
                     continue;
@@ -166,9 +185,9 @@ where
     S: KVRead + ?Sized,
 {
     let mut keys = Vec::new();
-    let mut cursor = KVCursor::new(SortOrder::Asc, None);
+    let mut cursor = KVCursor::first();
     loop {
-        let page = store.list(locale, &cursor, PAGES)?;
+        let page = store.list(locale, SortOrder::Asc, None, &cursor, PAGES)?;
         keys.extend(
             page.items
                 .into_iter()

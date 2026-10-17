@@ -14,7 +14,7 @@ use anyhow::Result;
 use midlang_core::{
     coverage::{coverage, missing_keys},
     internals::{InternalService, coverage::CoverageReporter},
-    store::{KVRead, KVStore, RedbStore, StoreObserver},
+    store::{KVCursor, KVRead, KVStore, RedbStore, StoreObserver},
 };
 use sqlx::sqlite::SqlitePoolOptions;
 
@@ -110,11 +110,11 @@ where
     );
 
     for locale in streaming.per_locale.keys() {
-        let mut cursor: Option<String> = None;
+        let mut cursor = KVCursor::first();
         for page in 0..MAX_PAGES {
-            let streamed = missing_keys(store, REFERENCE, locale, cursor.as_deref(), PAGE)?;
+            let streamed = missing_keys(store, REFERENCE, locale, &cursor, PAGE)?;
             let reported = reporter
-                .missing_keys(REFERENCE, locale, cursor.as_deref(), PAGE)
+                .missing_keys(REFERENCE, locale, &cursor, PAGE)
                 .await?;
             assert_eq!(
                 reported.items, streamed.items,
@@ -124,8 +124,8 @@ where
                 reported.next, streamed.next,
                 "missing key cursor diverged for {locale} on page {page}"
             );
-            match streamed.next {
-                Some(next) => cursor = Some(next),
+            match &streamed.next {
+                Some(next) => cursor = next.clone(),
                 None => break,
             }
         }

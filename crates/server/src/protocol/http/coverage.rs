@@ -10,8 +10,11 @@ use axum::{
 use midlang_core::{
     coverage::{CoverageReport, LocaleCoverage},
     query::pagination::DEFAULT_PAGE_SIZE,
+    store::KVCursor,
     translation::Translation,
 };
+
+use super::next_token;
 
 use crate::{
     protocol::error::{self, ErrorBody},
@@ -46,19 +49,19 @@ pub struct CoverageMessage {
 
 /// One page of the reference keys a locale does not translate.
 #[derive(Debug, serde::Serialize, utoipa::ToSchema)]
-pub struct MissingKeysPage {
+pub struct MissingKeysListPage {
     /// Untranslated keys, in ascending key order.
     pub items: Vec<String>,
-    /// Key to resume after on the next page, if one exists.
+    /// URL-safe cursor token for the next page, if one exists.
     pub next: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
-pub struct MissingKeysQuery {
+pub struct MissingKeysListQuery {
     /// Number of keys to return. Defaults to 100.
     pub limit: Option<usize>,
-    /// Key returned as `next` by the previous page.
+    /// Cursor of the page to read: the `next` token of the page on screen.
     pub cursor: Option<String>,
 }
 
@@ -176,10 +179,10 @@ where
     params(
         ("reference" = String, Path, description = "Locale that defines the key universe"),
         ("locale" = String, Path, description = "Locale the untranslated keys are listed for"),
-        MissingKeysQuery
+        MissingKeysListQuery
     ),
     responses(
-        (status = 200, description = "Paged untranslated keys", body = MissingKeysPage),
+        (status = 200, description = "Paged untranslated keys", body = MissingKeysListPage),
         (status = 400, description = "Invalid query", body = ErrorBody),
         (status = 401, description = "Missing or invalid token", body = ErrorBody),
         (status = 403, description = "Permission denied", body = ErrorBody),
@@ -191,7 +194,7 @@ where
 )]
 pub async fn missing_keys_handler<Store>(
     Path((reference, locale)): Path<(String, String)>,
-    Query(query): Query<MissingKeysQuery>,
+    Query(query): Query<MissingKeysListQuery>,
     Extension(auth): Extension<AuthContext>,
     State(translation): State<Translation<Store>>,
 ) -> Response
@@ -202,19 +205,32 @@ where
         return response;
     }
 
+    let cursor = match query.cursor {
+        Some(token) => match KVCursor::decode(&token) {
+            Ok(cursor) => cursor,
+            Err(err) => return error::bad_request(format!("invalid cursor: {err}")),
+        },
+        None => KVCursor::first(),
+    };
     let limit = query.limit.unwrap_or(DEFAULT_PAGE_SIZE);
     match translation
-        .missing_keys(&reference, &locale, query.cursor.as_deref(), limit)
+        .missing_keys(&reference, &locale, &cursor, limit)
         .await
     {
-        Ok(page) => (
-            StatusCode::OK,
-            Json(MissingKeysPage {
-                items: page.items,
-                next: page.next,
-            }),
-        )
-            .into_response(),
+        Ok(page) => {
+            let next = match next_token(&page.next) {
+                Ok(token) => token,
+                Err(err) => return error::coverage(err),
+            };
+            (
+                StatusCode::OK,
+                Json(MissingKeysListPage {
+                    items: page.items,
+                    next,
+                }),
+            )
+                .into_response()
+        }
         Err(err) => error::coverage(err),
     }
 }

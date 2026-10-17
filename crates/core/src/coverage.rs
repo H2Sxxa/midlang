@@ -56,15 +56,15 @@ pub struct CoverageReport {
 /// use.
 pub trait Coverage {
     fn coverage(&self, reference: &str) -> Result<CoverageReport>;
-    /// One page of the reference keys `locale` does not translate, in ascending
-    /// key order and resuming after `cursor`.
+    /// One page of the reference keys `locale` does not translate, from the
+    /// place `cursor` names onward.
     fn missing_keys(
         &self,
         reference: &str,
         locale: &str,
-        cursor: Option<&str>,
+        cursor: &KVCursor,
         limit: usize,
-    ) -> Result<Page<String, String>>;
+    ) -> Result<Page<String, KVCursor>>;
 }
 
 impl<T: KVRead + ?Sized> Coverage for T {
@@ -76,9 +76,9 @@ impl<T: KVRead + ?Sized> Coverage for T {
         &self,
         reference: &str,
         locale: &str,
-        cursor: Option<&str>,
+        cursor: &KVCursor,
         limit: usize,
-    ) -> Result<Page<String, String>> {
+    ) -> Result<Page<String, KVCursor>> {
         missing_keys(self, reference, locale, cursor, limit)
     }
 }
@@ -129,44 +129,44 @@ where
 /// is reported instead of an error: scouting a locale that is about to be
 /// created is the point.
 ///
-/// The cursor is the last key of the previous page; the scan resumes right
-/// after it in the reference's key order, which is also the order the keys are
-/// reported in.
+/// The cursor names the page by the key it starts at, so a page reads from its
+/// own place onward in ascending key order.
 pub fn missing_keys<S>(
     store: &S,
     reference: &str,
     locale: &str,
-    cursor: Option<&str>,
+    cursor: &KVCursor,
     limit: usize,
-) -> Result<Page<String, String>>
+) -> Result<Page<String, KVCursor>>
 where
     S: KVRead + ?Sized,
 {
     let locales = store.statistics()?.per_locale;
     require(&locales, reference)?;
 
-    let mut entries = Entries::new_at(store, reference, cursor);
-    let mut items: Vec<String> = Vec::new();
-    let mut more = false;
+    if limit == 0 {
+        return Ok(Page {
+            items: Vec::new(),
+            next: None,
+        });
+    }
 
+    // The page is the untranslated keys from the cursor's place onward, and the
+    // key past it is where the page after this one starts.
+    let mut items: Vec<String> = Vec::with_capacity(limit);
+    let mut next: Option<KVCursor> = None;
+    let mut entries = Entries::new_at(store, reference, cursor.position.as_deref());
     while let Some(entry) = entries.next_entry()? {
-        if entry.value.is_empty() {
-            continue;
-        }
-        if translates(store, locale, &entry.key)? {
+        if entry.value.is_empty() || translates(store, locale, &entry.key)? {
             continue;
         }
         if items.len() == limit {
-            more = true;
+            next = Some(KVCursor::at(entry.key));
             break;
         }
         items.push(entry.key);
     }
-
-    Ok(Page {
-        next: if more { items.last().cloned() } else { None },
-        items,
-    })
+    Ok(Page { items, next })
 }
 
 fn require(per_locale: &BTreeMap<String, usize>, locale: &str) -> Result<()> {
@@ -256,19 +256,19 @@ struct Entries<'s, S: KVRead + ?Sized> {
 }
 
 impl<'s, S: KVRead + ?Sized> Entries<'s, S> {
+    /// Walks every entry of `locale` in ascending key order.
     fn new(store: &'s S, locale: &'s str) -> Self {
         Self::new_at(store, locale, None)
     }
 
-    /// Starts at the first key after `after`.
-    fn new_at(store: &'s S, locale: &'s str, after: Option<&str>) -> Self {
+    /// Starts at the first entry whose key is at or beyond `start`.
+    fn new_at(store: &'s S, locale: &'s str, start: Option<&str>) -> Self {
         Entries {
             store,
             locale,
-            cursor: KVCursor {
-                order: SortOrder::Asc,
-                filter: None,
-                next: after.map(str::to_string),
+            cursor: match start {
+                Some(key) => KVCursor::at(key.to_string()),
+                None => KVCursor::first(),
             },
             page: Vec::new().into_iter(),
             exhausted: false,
@@ -283,9 +283,13 @@ impl<'s, S: KVRead + ?Sized> Entries<'s, S> {
             if self.exhausted {
                 return Ok(None);
             }
-            let page = self
-                .store
-                .list(self.locale, &self.cursor, ENTRIES_PER_PAGE)?;
+            let page = self.store.list(
+                self.locale,
+                SortOrder::Asc,
+                None,
+                &self.cursor,
+                ENTRIES_PER_PAGE,
+            )?;
             self.exhausted = page.next.is_none();
             if let Some(next) = page.next {
                 self.cursor = next;

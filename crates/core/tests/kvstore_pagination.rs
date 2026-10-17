@@ -1,4 +1,6 @@
-use midlang_core::store::{KVCursor, KVEntry, KVRead, KVStore, RedbStore, SortOrder, StoreError};
+use midlang_core::store::{
+    KVCursor, KVEntry, KVPage, KVRead, KVStore, RedbStore, SortOrder, StoreError,
+};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -40,10 +42,10 @@ fn list_all(
     limit: usize,
     order: SortOrder,
 ) -> Vec<KVEntry> {
-    let mut cursor = KVCursor::new(order, keyword.map(str::to_string));
+    let mut cursor = KVCursor::first();
     let mut all: Vec<KVEntry> = Vec::new();
     for _ in 0..SEEDED + 1 {
-        let page = store.list("en", &cursor, limit).unwrap();
+        let page = store.list("en", order, keyword, &cursor, limit).unwrap();
         assert!(page.items.len() <= limit);
         all.extend(page.items);
         match page.next {
@@ -52,6 +54,11 @@ fn list_all(
         }
     }
     panic!("pagination did not terminate");
+}
+
+/// The keys of one page, in the order the page reads them.
+fn keys_of(page: &KVPage) -> Vec<String> {
+    page.items.iter().map(|entry| entry.key.clone()).collect()
 }
 
 #[test]
@@ -75,6 +82,32 @@ fn desc_pagination_is_the_reverse_of_asc() {
     let mut expected: Vec<String> = (0..SEEDED).map(|i| format!("k{i:02}")).collect();
     expected.reverse();
     assert_eq!(keys, expected);
+
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn a_token_always_reads_the_page_it_names() {
+    let (store, path) = seeded_store();
+
+    // A cursor is a place, so reading it always returns the same page, and
+    // stepping back is re-reading a token the caller kept.
+    for order in [SortOrder::Asc, SortOrder::Desc] {
+        let first_cursor = KVCursor::first();
+        let first = store.list("en", order, None, &first_cursor, 10).unwrap();
+        let first_keys = keys_of(&first);
+        assert_eq!(first_keys.len(), 10);
+
+        let second_cursor = first.next.clone().unwrap();
+        let second_keys = keys_of(&store.list("en", order, None, &second_cursor, 10).unwrap());
+        assert_ne!(second_keys, first_keys);
+
+        // The next token re-reads the second page, the first token the first.
+        let again = store.list("en", order, None, &second_cursor, 10).unwrap();
+        assert_eq!(keys_of(&again), second_keys);
+        let back = store.list("en", order, None, &first_cursor, 10).unwrap();
+        assert_eq!(keys_of(&back), first_keys);
+    }
 
     std::fs::remove_file(path).unwrap();
 }
@@ -105,13 +138,10 @@ fn keyword_is_a_substring_match() {
 
 #[test]
 fn cursor_round_trips_through_a_token() {
-    let mut cursor = KVCursor::new(SortOrder::Desc, Some("k1".to_string()));
-    cursor.next = Some("k17".to_string());
+    let cursor = KVCursor::at("k17".to_string());
 
     let decoded = KVCursor::decode(&cursor.encode().unwrap()).unwrap();
-    assert_eq!(decoded.order, SortOrder::Desc);
-    assert_eq!(decoded.filter.as_deref(), Some("k1"));
-    assert_eq!(decoded.next.as_deref(), Some("k17"));
+    assert_eq!(decoded.position.as_deref(), Some("k17"));
 }
 
 #[test]
@@ -137,7 +167,7 @@ fn missing_locale_is_reported() {
     let (store, path) = seeded_store();
 
     let error = store
-        .list("de", &KVCursor::new(SortOrder::Asc, None), 5)
+        .list("de", SortOrder::Asc, None, &KVCursor::first(), 5)
         .unwrap_err();
     assert!(matches!(
         error.downcast_ref::<StoreError>(),

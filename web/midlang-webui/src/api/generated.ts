@@ -435,10 +435,10 @@ export interface components {
             ratio: number;
         };
         /** @description One page of the reference keys a locale does not translate. */
-        MissingKeysPage: {
+        MissingKeysListPage: {
             /** @description Untranslated keys, in ascending key order. */
             items: string[];
-            /** @description Key to resume after on the next page, if one exists. */
+            /** @description URL-safe cursor token for the next page, if one exists. */
             next?: string | null;
         };
         PermissionInfo: {
@@ -1165,11 +1165,11 @@ export interface operations {
                 state?: string;
                 /** @description Case-insensitive substring matched against the key or either value. */
                 keyword?: string;
-                /** @description Sort direction: `asc` or `desc` (default). A cursor carries its own direction. */
+                /** @description Sort direction: `asc` or `desc` (default). */
                 order?: string;
                 /** @description Number of entries to return. Defaults to 100. */
                 limit?: number;
-                /** @description Cursor returned by the previous page. */
+                /** @description Cursor of the page to read: the `next` token of the page on screen. */
                 cursor?: string;
             };
             header?: never;
@@ -1499,7 +1499,7 @@ export interface operations {
             query?: {
                 /** @description Number of keys to return. Defaults to 100. */
                 limit?: number;
-                /** @description Key returned as `next` by the previous page. */
+                /** @description Cursor of the page to read: the `next` token of the page on screen. */
                 cursor?: string;
             };
             header?: never;
@@ -1519,7 +1519,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MissingKeysPage"];
+                    "application/json": components["schemas"]["MissingKeysListPage"];
                 };
             };
             /** @description Invalid query */
@@ -1609,11 +1609,11 @@ export interface operations {
                 keyword?: string;
                 /** @description Sort field: `last_seen` (default), `created_at` or `count`. */
                 sort?: string;
-                /** @description Sort direction: `asc` or `desc` (default). A cursor carries its own direction. */
+                /** @description Sort direction: `asc` or `desc` (default). */
                 order?: string;
                 /** @description Number of issues to return. Defaults to 100. */
                 limit?: number;
-                /** @description Cursor returned by the previous page. */
+                /** @description Cursor of the page to read: the `next` token of the page on screen. */
                 cursor?: string;
             };
             header?: never;
@@ -1854,9 +1854,9 @@ export interface operations {
                 keyword?: string;
                 /** @description Number of entries to return. Defaults to 100. */
                 limit?: number;
-                /** @description Cursor returned by the previous page. */
+                /** @description Cursor of the page to read: the `next` token of the page on screen. */
                 cursor?: string;
-                /** @description Sort direction for the first page. A cursor carries its own direction. */
+                /** @description Sort direction: `asc` or `desc` (default). */
                 order?: string;
             };
             header?: never;

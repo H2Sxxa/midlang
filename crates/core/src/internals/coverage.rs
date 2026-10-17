@@ -132,9 +132,9 @@ impl CoverageReporter {
         for locale in locales.keys() {
             let locale_id = upsert_locale(&mut tx, locale).await?;
             let mut keys = Vec::new();
-            let mut cursor = KVCursor::new(SortOrder::Asc, None);
+            let mut cursor = KVCursor::first();
             loop {
-                let page = store.list(locale, &cursor, ENTRIES_PER_PAGE)?;
+                let page = store.list(locale, SortOrder::Asc, None, &cursor, ENTRIES_PER_PAGE)?;
                 keys.extend(
                     page.items
                         .into_iter()
@@ -315,64 +315,40 @@ impl CoverageReporter {
         &self,
         reference: &str,
         locale: &str,
-        cursor: Option<&str>,
+        cursor: &KVCursor,
         limit: usize,
-    ) -> Result<Page<String, String>> {
+    ) -> Result<Page<String, KVCursor>> {
         self.flush().await?;
         let reference_id = find_locale(&self.pool, reference)
             .await?
             .ok_or_else(|| crate::store::StoreError::LocaleNotExist(reference.to_string()))?;
         let locale_id = find_locale(&self.pool, locale).await?;
 
-        let mut rows = if let Some(locale_id) = locale_id {
-            sqlx::query_scalar(
-                "
-                SELECT keys.key
-                  FROM midlang_coverage_translations AS reference
-                  JOIN midlang_coverage_keys AS keys ON keys.id = reference.key_id
-                  LEFT JOIN midlang_coverage_translations AS translated
-                    ON translated.key_id = reference.key_id AND translated.locale_id = ?
-                 WHERE reference.locale_id = ?
-                   AND translated.key_id IS NULL
-                   AND (? IS NULL OR keys.key > ?)
-                 ORDER BY keys.key
-                 LIMIT ?
-                ",
-            )
-            .bind(locale_id)
-            .bind(reference_id)
-            .bind(cursor)
-            .bind(cursor)
-            .bind(limit as i64 + 1)
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query_scalar(
-                "
-                SELECT keys.key
-                  FROM midlang_coverage_translations AS reference
-                  JOIN midlang_coverage_keys AS keys ON keys.id = reference.key_id
-                 WHERE reference.locale_id = ?
-                   AND (? IS NULL OR keys.key > ?)
-                 ORDER BY keys.key
-                 LIMIT ?
-                ",
-            )
-            .bind(reference_id)
-            .bind(cursor)
-            .bind(cursor)
-            .bind(limit as i64 + 1)
-            .fetch_all(&self.pool)
-            .await?
-        };
+        if limit == 0 {
+            return Ok(Page {
+                items: Vec::new(),
+                next: None,
+            });
+        }
 
-        let next = if rows.len() > limit {
-            rows.truncate(limit);
-            rows.last().cloned()
-        } else {
-            None
-        };
-        Ok(Page { items: rows, next })
+        // A page is the untranslated keys from its own place onward, in
+        // ascending key order.
+        let mut builder = missing_keys_query(reference_id, locale_id);
+        if let Some(position) = &cursor.position {
+            builder
+                .push(" AND keys.key >= ")
+                .push_bind(position.clone());
+        }
+        builder
+            .push(" ORDER BY keys.key ASC LIMIT ")
+            .push_bind(limit as i64 + 1);
+
+        let mut items: Vec<String> = builder.build_query_scalar().fetch_all(&self.pool).await?;
+        // The key past the page is where the page after this one starts.
+        let next = items.get(limit).map(|key| KVCursor::at(key.clone()));
+        items.truncate(limit);
+
+        Ok(Page { items, next })
     }
 
     /// Every locale coverage knows about, in ascending order. This is the set
@@ -455,6 +431,35 @@ impl Workable for CoverageReporter {
         self.flush().await?;
         Ok(WorkState::ACTIVE)
     }
+}
+
+/// The reference keys `locale` does not translate, left unordered so a caller
+/// can pick the place and the ordering it reads them in.
+///
+/// A locale the store does not have translates nothing, so every reference key
+/// is reported rather than an error.
+fn missing_keys_query(reference_id: i64, locale_id: Option<i64>) -> QueryBuilder<Sqlite> {
+    let mut builder = QueryBuilder::new(
+        "SELECT keys.key \
+           FROM midlang_coverage_translations AS reference \
+           JOIN midlang_coverage_keys AS keys ON keys.id = reference.key_id",
+    );
+    if let Some(locale_id) = locale_id {
+        builder
+            .push(
+                " LEFT JOIN midlang_coverage_translations AS translated \
+                   ON translated.key_id = reference.key_id AND translated.locale_id = ",
+            )
+            .push_bind(locale_id)
+            .push(" WHERE reference.locale_id = ")
+            .push_bind(reference_id)
+            .push(" AND translated.key_id IS NULL");
+    } else {
+        builder
+            .push(" WHERE reference.locale_id = ")
+            .push_bind(reference_id);
+    }
+    builder
 }
 
 async fn find_locale<'e, E>(executor: E, locale: &str) -> Result<Option<i64>>

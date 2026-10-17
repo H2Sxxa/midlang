@@ -22,40 +22,47 @@ impl Display for SortOrder {
     }
 }
 
-/// Keyset cursor that carries everything a page needs: the ordering, the filter
-/// and the position to resume from.
+/// A place in a keyset listing: the sort key of the row a page starts at.
 ///
-/// `K` is the filter (which rows are in scope, e.g. a keyword) and `N` is the
-/// position (the sort key of the last row that was returned, e.g. the entry
-/// key). Page one is [`QueryCursor::new`] with `next: None`; every following
-/// page passes back the cursor of the previous page, so the ordering and filter
-/// cannot drift away from the position.
+/// A cursor says where to read from, never what to read. The order and the
+/// filter of a listing travel with the request, so a token stays short, cannot
+/// contradict the query it arrives with, and can be linked to and shared.
+/// `position: None` is the place before every row, which is the first page.
 ///
-/// A table that sorts on a single unique key uses that key directly, a table
-/// that sorts on more than one column uses a closed enum:
+/// Reading a listing at a cursor returns the rows from that place onward, in the
+/// listing's order, up to the page size: the row at the place is the first row
+/// of the page, and where the page after it starts is the [`Page::next`] the
+/// listing hands back. A listing reads in one direction only, so where a reader
+/// came from is the reader's own trail of cursors rather than something the
+/// listing keeps.
+///
+/// A listing that sorts on more than one column uses a position type that
+/// carries every column, so one place stays one value:
 ///
 /// ```text
-/// type KVCursor = QueryCursor<KVFilter, String>;
+/// type KVCursor = Cursor<String>;
 ///
-/// enum ChangelogKey {
-///     Id { id: i64 },
-///     CreatedAt { created_at: i64, id: i64 },
+/// struct IssuePosition {
+///     value: i64,
+///     id: String,
 /// }
-/// type ChangelogCursor = QueryCursor<ChangelogFilter, ChangelogKey>;
+/// type IssueCursor = Cursor<IssuePosition>;
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueryCursor<K, N> {
-    pub order: SortOrder,
-    pub filter: K,
-    pub next: Option<N>,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Cursor<N> {
+    pub position: Option<N>,
 }
 
-impl<K, N> QueryCursor<K, N> {
-    pub fn new(order: SortOrder, filter: K) -> Self {
-        QueryCursor {
-            order,
-            filter,
-            next: None,
+impl<N> Cursor<N> {
+    /// Cursor of the first page: no position, reading from the start.
+    pub fn first() -> Self {
+        Cursor { position: None }
+    }
+
+    /// Cursor of the page that starts at `position`.
+    pub fn at(position: N) -> Self {
+        Cursor {
+            position: Some(position),
         }
     }
 
@@ -63,17 +70,15 @@ impl<K, N> QueryCursor<K, N> {
     /// query string or header without further escaping.
     pub fn encode(&self) -> Result<String>
     where
-        K: Serialize,
         N: Serialize,
     {
         let json = serde_json::to_vec(self).context("failed to serialize cursor")?;
         Ok(URL_SAFE_NO_PAD.encode(json))
     }
 
-    /// Decodes a token produced by [`QueryCursor::encode`].
+    /// Decodes a token produced by [`Cursor::encode`].
     pub fn decode(encoded: &str) -> Result<Self>
     where
-        K: DeserializeOwned,
         N: DeserializeOwned,
     {
         let json = URL_SAFE_NO_PAD
@@ -83,12 +88,11 @@ impl<K, N> QueryCursor<K, N> {
     }
 }
 
-/// One page of results plus the cursor that resumes the listing.
+/// One page of results plus the cursor of the page after it.
 ///
-/// Every list surface (translations, issues, changelog) returns this shape, so
-/// pagination behaves identically everywhere: `next` is `None` on the last page
-/// and otherwise carries the ordering, the filter and the position, which keeps
-/// the resumed query from drifting away from the one that produced the page.
+/// Every list surface (translations, issues, changelog, coverage) returns this
+/// shape, so pagination behaves identically everywhere: `next` is `None` on the
+/// last page and otherwise names the place the next page starts at.
 #[derive(Debug, Clone, Serialize)]
 pub struct Page<T, C> {
     pub items: Vec<T>,

@@ -1,16 +1,10 @@
-import {
-  type InfiniteData,
-  type QueryKey,
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import type { components } from "@/api/generated"
 import { useClient } from "@/hooks/use-client"
+import { useCursorPage } from "@/hooks/use-cursor-page"
 import type { SortOrder } from "@/lib/query"
 
 export type Change = components["schemas"]["ChangelogMessage"]
-export type ChangeListPage = components["schemas"]["ChangelogListPage"]
 
 export type ChangeState = "created" | "updated" | "deleted"
 
@@ -21,23 +15,28 @@ type ChangelogOptions = {
   readonly locale: string
   readonly state: ChangeState | ""
   readonly order: SortOrder
+  readonly cursor: string
+  readonly onCursorChange: (cursor: string) => void
 }
 
-export function useChangelog({ keyword, locale, state, order }: ChangelogOptions) {
+/** One page of recorded changes, plus the mutation that rolls one back. */
+export function useChangelog({
+  keyword,
+  locale,
+  state,
+  order,
+  cursor,
+  onCursorChange,
+}: ChangelogOptions) {
   const client = useClient()
   const queryClient = useQueryClient()
 
-  const listQuery = useInfiniteQuery<
-    ChangeListPage,
-    Error,
-    InfiniteData<ChangeListPage>,
-    QueryKey,
-    string | undefined
-  >({
+  const list = useCursorPage<Change>({
     queryKey: ["changelog", client, keyword, locale, state, order],
-    initialPageParam: undefined,
-    getNextPageParam: (lastPage) => lastPage.next ?? undefined,
-    queryFn: async ({ pageParam }) => {
+    enabled: true,
+    cursor,
+    onCursorChange,
+    fetchPage: async (pageCursor) => {
       const result = await client.GET("/changelog", {
         params: {
           query: {
@@ -46,7 +45,7 @@ export function useChangelog({ keyword, locale, state, order }: ChangelogOptions
             state: state || undefined,
             order,
             limit: 25,
-            cursor: pageParam,
+            cursor: pageCursor,
           },
         },
       })
@@ -66,5 +65,5 @@ export function useChangelog({ keyword, locale, state, order }: ChangelogOptions
     },
   })
 
-  return { listQuery, rollbackMutation }
+  return { list, rollbackMutation }
 }

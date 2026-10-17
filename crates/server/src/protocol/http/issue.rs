@@ -11,6 +11,8 @@ use midlang_core::{
     translation::Translation,
 };
 
+use super::next_token;
+
 use crate::{
     protocol::error::{self, ErrorBody},
     secure::{self, AuthContext},
@@ -27,11 +29,11 @@ pub struct IssueListQuery {
     pub keyword: Option<String>,
     /// Sort field: `last_seen` (default), `created_at` or `count`.
     pub sort: Option<String>,
-    /// Sort direction: `asc` or `desc` (default). A cursor carries its own direction.
+    /// Sort direction: `asc` or `desc` (default).
     pub order: Option<String>,
     /// Number of issues to return. Defaults to 100.
     pub limit: Option<usize>,
-    /// Cursor returned by the previous page.
+    /// Cursor of the page to read: the `next` token of the page on screen.
     pub cursor: Option<String>,
 }
 
@@ -156,31 +158,29 @@ where
         Err(response) => return response,
     };
 
+    let filter = IssueFilter {
+        state,
+        kind: query.kind.clone(),
+        keyword: query.keyword.clone(),
+        sort,
+    };
     let cursor = match query.cursor {
         Some(token) => match IssueCursor::decode(&token) {
             Ok(cursor) => cursor,
             Err(err) => return error::bad_request(format!("invalid cursor: {err}")),
         },
-        None => IssueCursor::new(
-            order,
-            IssueFilter {
-                state,
-                kind: query.kind.clone(),
-                keyword: query.keyword.clone(),
-                sort,
-            },
-        ),
+        None => IssueCursor::first(),
     };
     let limit = query.limit.unwrap_or(DEFAULT_PAGE_SIZE);
 
-    match translation.list_issues(&cursor, limit).await {
+    match translation
+        .list_issues(&filter, order, &cursor, limit)
+        .await
+    {
         Ok(page) => {
-            let next = match page.next {
-                Some(cursor) => match cursor.encode() {
-                    Ok(token) => Some(token),
-                    Err(err) => return error::diagnostics(err),
-                },
-                None => None,
+            let next = match next_token(&page.next) {
+                Ok(token) => token,
+                Err(err) => return error::diagnostics(err),
             };
             (
                 StatusCode::OK,

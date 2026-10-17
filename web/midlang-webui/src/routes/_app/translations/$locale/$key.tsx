@@ -14,7 +14,7 @@ function TranslationDetailPage() {
   const auth = useAuth()
   const { locale, key } = Route.useParams()
   const navigate = useNavigate()
-  const translation = useTranslation({ locale, key, keyword: "", order: "asc" })
+  const translation = useTranslation({ locale, key })
   const [error, setError] = useState<string | null>(null)
 
   const handleDelete = async () => {

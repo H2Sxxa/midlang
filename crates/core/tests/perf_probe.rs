@@ -34,16 +34,18 @@ fn seed(path: &PathBuf) {
     drop(db);
 }
 
-fn cursor_of(keyword: Option<&str>) -> KVCursor {
-    KVCursor::new(SortOrder::Asc, keyword.map(str::to_string))
-}
-
-fn page(store: &RedbStore, cursor: &KVCursor, limit: usize) -> (usize, Option<KVCursor>) {
+fn page(
+    store: &RedbStore,
+    keyword: Option<&str>,
+    cursor: &KVCursor,
+    limit: usize,
+) -> (usize, Option<KVCursor>) {
     let start = Instant::now();
-    let page = store.list("en", cursor, limit).unwrap();
+    let page = store
+        .list("en", SortOrder::Asc, keyword, cursor, limit)
+        .unwrap();
     println!(
-        "  filter={:?} limit={limit:<6} -> {:?} ({} rows, next={})",
-        cursor.filter,
+        "  filter={keyword:?} limit={limit:<6} -> {:?} ({} rows, next={})",
         start.elapsed(),
         page.items.len(),
         page.next.is_some()
@@ -64,16 +66,21 @@ fn probe() {
     let store = RedbStore::new(&path).unwrap();
 
     println!("query:");
-    page(&store, &cursor_of(None), 50);
-    page(&store, &cursor_of(Some("key000001")), 50);
-    page(&store, &cursor_of(Some("app.namespace.key099999")), 50);
-    page(&store, &cursor_of(Some("nothing-matches")), 50);
+    page(&store, None, &KVCursor::first(), 50);
+    page(&store, Some("key000001"), &KVCursor::first(), 50);
+    page(
+        &store,
+        Some("app.namespace.key099999"),
+        &KVCursor::first(),
+        50,
+    );
+    page(&store, Some("nothing-matches"), &KVCursor::first(), 50);
 
     let start = Instant::now();
-    let mut cursor = cursor_of(None);
+    let mut cursor = KVCursor::first();
     let mut total = 0;
     loop {
-        let (rows, following) = page(&store, &cursor, 500);
+        let (rows, following) = page(&store, None, &cursor, 500);
         total += rows;
         match following {
             Some(next) => cursor = next,
@@ -83,10 +90,10 @@ fn probe() {
     println!("  full pagination of {total} rows: {:?}", start.elapsed());
 
     let start = Instant::now();
-    let mut cursor = cursor_of(Some("value number"));
+    let mut cursor = KVCursor::first();
     let mut total = 0;
     loop {
-        let (rows, following) = page(&store, &cursor, 500);
+        let (rows, following) = page(&store, Some("value number"), &cursor, 500);
         total += rows;
         match following {
             Some(next) => cursor = next,

@@ -52,7 +52,7 @@ use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
             super::issue::UpdateIssueRequest,
             super::coverage::CoverageMessage,
             super::coverage::LocaleCoverageMessage,
-            super::coverage::MissingKeysPage,
+            super::coverage::MissingKeysListPage,
             super::coverage::CoverageLocales,
             super::changelog::ChangelogMessage,
             super::changelog::ChangelogListPage,

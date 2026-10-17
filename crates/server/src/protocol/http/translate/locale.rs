@@ -10,6 +10,8 @@ use midlang_core::{
     translation::Translation,
 };
 
+use crate::protocol::http::next_token;
+
 use crate::{
     protocol::{error, error::ErrorBody},
     secure::{self, AuthContext},
@@ -22,9 +24,9 @@ pub struct TranslationListQuery {
     pub keyword: Option<String>,
     /// Number of entries to return. Defaults to 100.
     pub limit: Option<usize>,
-    /// Cursor returned by the previous page.
+    /// Cursor of the page to read: the `next` token of the page on screen.
     pub cursor: Option<String>,
-    /// Sort direction for the first page. A cursor carries its own direction.
+    /// Sort direction: `asc` or `desc` (default).
     pub order: Option<String>,
 }
 
@@ -86,18 +88,15 @@ where
             Ok(cursor) => cursor,
             Err(err) => return error::bad_request(format!("invalid cursor: {err}")),
         },
-        None => KVCursor::new(order, query.keyword.clone()),
+        None => KVCursor::first(),
     };
     let limit = query.limit.unwrap_or(DEFAULT_PAGE_SIZE);
 
-    match translation.list(&locale, &cursor, limit) {
+    match translation.list(&locale, order, query.keyword.as_deref(), &cursor, limit) {
         Ok(page) => {
-            let next = match page.next {
-                Some(cursor) => match cursor.encode() {
-                    Ok(token) => Some(token),
-                    Err(err) => return error::store(err),
-                },
-                None => None,
+            let next = match next_token(&page.next) {
+                Ok(token) => token,
+                Err(err) => return error::store(err),
             };
             (
                 StatusCode::OK,

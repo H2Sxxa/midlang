@@ -1,22 +1,22 @@
-import {
-  type InfiniteData,
-  type QueryKey,
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { components } from "@/api/generated"
 import { useClient } from "@/hooks/use-client"
+import { useCursorPage, type CursorPageState } from "@/hooks/use-cursor-page"
 import type { SortOrder } from "@/lib/query"
 
-export type TranslationListPage = components["schemas"]["TranslationListPage"]
+export type TranslationListEntry = components["schemas"]["TranslationListEntry"]
 
 type TranslationOptions = {
   readonly locale: string
+  readonly key?: string
+}
+
+type TranslationListOptions = {
+  readonly locale: string
   readonly keyword: string
   readonly order: SortOrder
-  readonly key?: string
+  readonly cursor: string
+  readonly onCursorChange: (cursor: string) => void
 }
 
 type SaveTranslationInput = {
@@ -67,7 +67,8 @@ export function useTranslationMutations() {
   return { saveMutation, deleteMutation }
 }
 
-export function useTranslation({ locale, keyword, order, key }: TranslationOptions) {
+/** Locales the store holds, plus the one a list or detail view should open. */
+export function useTranslation({ locale, key }: TranslationOptions) {
   const client = useClient()
   const { saveMutation, deleteMutation } = useTranslationMutations()
 
@@ -81,33 +82,6 @@ export function useTranslation({ locale, keyword, order, key }: TranslationOptio
 
   const locales = Object.keys(statisticsQuery.data?.per_locale ?? {})
   const selectedLocale = locale || locales[0] || ""
-
-  const listQuery = useInfiniteQuery<
-    TranslationListPage,
-    Error,
-    InfiniteData<TranslationListPage>,
-    QueryKey,
-    string | undefined
-  >({
-    queryKey: ["translations", client, selectedLocale, keyword, order],
-    initialPageParam: undefined,
-    getNextPageParam: (lastPage) => lastPage.next ?? undefined,
-    enabled: selectedLocale !== "" && key === undefined,
-    queryFn: async ({ pageParam }) => {
-      const result = await client.GET("/t/{locale}", {
-        params: {
-          path: { locale: selectedLocale },
-          query: {
-            keyword: keyword || undefined,
-            limit: 25,
-            cursor: pageParam,
-            order,
-          },
-        },
-      })
-      return result.data!
-    },
-  })
 
   const detailQuery = useQuery({
     queryKey: ["translation", client, selectedLocale, key],
@@ -125,9 +99,43 @@ export function useTranslation({ locale, keyword, order, key }: TranslationOptio
     locales,
     selectedLocale,
     statisticsQuery,
-    listQuery,
     detailQuery,
     saveMutation,
     deleteMutation,
   }
+}
+
+/**
+ * One page of the translations of a locale. The cursor lives in the URL, so a
+ * page is linkable and stepping back uses the cursor the endpoint handed back.
+ */
+export function useTranslationList({
+  locale,
+  keyword,
+  order,
+  cursor,
+  onCursorChange,
+}: TranslationListOptions): CursorPageState<TranslationListEntry> {
+  const client = useClient()
+
+  return useCursorPage<TranslationListEntry>({
+    queryKey: ["translations", client, locale, keyword, order],
+    enabled: locale !== "",
+    cursor,
+    onCursorChange,
+    fetchPage: async (pageCursor) => {
+      const result = await client.GET("/t/{locale}", {
+        params: {
+          path: { locale },
+          query: {
+            keyword: keyword || undefined,
+            limit: 25,
+            cursor: pageCursor,
+            order,
+          },
+        },
+      })
+      return result.data!
+    },
+  })
 }

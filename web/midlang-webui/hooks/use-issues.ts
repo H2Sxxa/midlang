@@ -1,16 +1,10 @@
-import {
-  type InfiniteData,
-  type QueryKey,
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import type { components } from "@/api/generated"
 import { useClient } from "@/hooks/use-client"
+import { useCursorPage } from "@/hooks/use-cursor-page"
 import type { SortOrder } from "@/lib/query"
 
 export type Issue = components["schemas"]["IssueMessage"]
-export type IssueListPage = components["schemas"]["IssueListPage"]
 
 export type IssueState = "open" | "closed" | "ignored"
 export type IssueSort = "last_seen" | "created_at" | "count"
@@ -25,6 +19,8 @@ type IssueOptions = {
   readonly kind: IssueKind | ""
   readonly sort: IssueSort
   readonly order: SortOrder
+  readonly cursor: string
+  readonly onCursorChange: (cursor: string) => void
 }
 
 type SetStateInput = {
@@ -32,21 +28,25 @@ type SetStateInput = {
   readonly state: IssueState
 }
 
-export function useIssues({ keyword, state, kind, sort, order }: IssueOptions) {
+/** One page of reported issues, plus the mutation that moves one through its states. */
+export function useIssues({
+  keyword,
+  state,
+  kind,
+  sort,
+  order,
+  cursor,
+  onCursorChange,
+}: IssueOptions) {
   const client = useClient()
   const queryClient = useQueryClient()
 
-  const listQuery = useInfiniteQuery<
-    IssueListPage,
-    Error,
-    InfiniteData<IssueListPage>,
-    QueryKey,
-    string | undefined
-  >({
+  const list = useCursorPage<Issue>({
     queryKey: ["issues", client, keyword, state, kind, sort, order],
-    initialPageParam: undefined,
-    getNextPageParam: (lastPage) => lastPage.next ?? undefined,
-    queryFn: async ({ pageParam }) => {
+    enabled: true,
+    cursor,
+    onCursorChange,
+    fetchPage: async (pageCursor) => {
       const result = await client.GET("/issues", {
         params: {
           query: {
@@ -56,7 +56,7 @@ export function useIssues({ keyword, state, kind, sort, order }: IssueOptions) {
             sort,
             order,
             limit: 25,
-            cursor: pageParam,
+            cursor: pageCursor,
           },
         },
       })
@@ -77,5 +77,5 @@ export function useIssues({ keyword, state, kind, sort, order }: IssueOptions) {
     },
   })
 
-  return { listQuery, setStateMutation }
+  return { list, setStateMutation }
 }

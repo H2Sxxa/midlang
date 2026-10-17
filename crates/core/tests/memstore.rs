@@ -1,10 +1,10 @@
 use midlang_core::store::{KVCursor, KVRead, KVStore, MemStore, SortOrder, StoreError, ValueState};
 
 fn list_all(store: &MemStore, locale: &str, limit: usize, order: SortOrder) -> Vec<String> {
-    let mut cursor = KVCursor::new(order, None);
+    let mut cursor = KVCursor::first();
     let mut keys = Vec::new();
     loop {
-        let page = store.list(locale, &cursor, limit).unwrap();
+        let page = store.list(locale, order, None, &cursor, limit).unwrap();
         keys.extend(page.items.into_iter().map(|entry| entry.key));
         match page.next {
             Some(next) => cursor = next,
@@ -44,7 +44,7 @@ fn paginates_both_directions_and_filters_values() {
     );
 
     let page = store
-        .list("en", &KVCursor::new(SortOrder::Asc, Some("TWO".into())), 10)
+        .list("en", SortOrder::Asc, Some("TWO"), &KVCursor::first(), 10)
         .unwrap();
     assert_eq!(page.items.len(), 1);
     assert_eq!(page.items[0].key, "b");

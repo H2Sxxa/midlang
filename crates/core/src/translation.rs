@@ -2,10 +2,10 @@ use crate::{
     coverage::CoverageReport,
     internals::{
         InternalService,
-        changelog::{ChangeRecord, Changelog, ChangelogCursor, ChangelogPage},
-        issues::{IssueCursor, IssuePage, IssueRecord, IssueState, TranslationIssue},
+        changelog::{ChangeRecord, Changelog, ChangelogCursor, ChangelogFilter, ChangelogPage},
+        issues::{IssueCursor, IssueFilter, IssuePage, IssueRecord, IssueState, TranslationIssue},
     },
-    query::Page,
+    query::{Page, SortOrder},
     store::{KVCursor, KVPage, KVRead, KVStore, StoreError, ValueState},
 };
 
@@ -86,16 +86,32 @@ where
         self.store.statistics()
     }
 
-    /// Lists the entries for a locale using the store's keyset pagination and
-    /// filter semantics. Listing is a pure read and deliberately does not
-    /// report missing keys as issues.
-    pub fn list(&self, locale: &str, cursor: &KVCursor, limit: usize) -> Result<KVPage> {
-        self.store.list(locale, cursor, limit)
+    /// Lists the entries of a locale using the store's keyset pagination and
+    /// filter semantics: the entries from the cursor's place onward, in `order`,
+    /// keeping those whose key or value contains `keyword`. Listing is a pure
+    /// read and deliberately does not report missing keys as issues.
+    pub fn list(
+        &self,
+        locale: &str,
+        order: SortOrder,
+        keyword: Option<&str>,
+        cursor: &KVCursor,
+        limit: usize,
+    ) -> Result<KVPage> {
+        self.store.list(locale, order, keyword, cursor, limit)
     }
 
     /// Lists reported translation issues, most recent first by default.
-    pub async fn list_issues(&self, cursor: &IssueCursor, limit: usize) -> Result<IssuePage> {
-        self.internal_service.list_issues(cursor, limit).await
+    pub async fn list_issues(
+        &self,
+        filter: &IssueFilter,
+        order: SortOrder,
+        cursor: &IssueCursor,
+        limit: usize,
+    ) -> Result<IssuePage> {
+        self.internal_service
+            .list_issues(filter, order, cursor, limit)
+            .await
     }
 
     /// Loads one reported issue by its id.
@@ -111,10 +127,14 @@ where
     /// Lists recorded changes, most recent first by default.
     pub async fn list_changes(
         &self,
+        filter: &ChangelogFilter,
+        order: SortOrder,
         cursor: &ChangelogCursor,
         limit: usize,
     ) -> Result<ChangelogPage> {
-        self.internal_service.list_changes(cursor, limit).await
+        self.internal_service
+            .list_changes(filter, order, cursor, limit)
+            .await
     }
 
     /// Loads one recorded change by its id.
@@ -131,14 +151,14 @@ where
     }
 
     /// One page of the `reference` keys `locale` does not translate, in
-    /// ascending key order and resuming after `cursor`.
+    /// ascending key order from the place `cursor` names onward.
     pub async fn missing_keys(
         &self,
         reference: &str,
         locale: &str,
-        cursor: Option<&str>,
+        cursor: &KVCursor,
         limit: usize,
-    ) -> Result<Page<String, String>> {
+    ) -> Result<Page<String, KVCursor>> {
         self.internal_service
             .coverage_missing_keys(reference, locale, cursor, limit)
             .await

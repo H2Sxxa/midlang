@@ -1,15 +1,10 @@
-import {
-  type InfiniteData,
-  type QueryKey,
-  useInfiniteQuery,
-  useQuery,
-} from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import type { components } from "@/api/generated"
 import { useClient } from "@/hooks/use-client"
+import { useCursorPage, type CursorPageState } from "@/hooks/use-cursor-page"
 
 export type CoverageReport = components["schemas"]["CoverageMessage"]
 export type LocaleCoverage = components["schemas"]["LocaleCoverageMessage"]
-export type MissingKeysPage = components["schemas"]["MissingKeysPage"]
 
 /** Locales coverage knows about, used to pick the locale it is measured against. */
 export function useCoverageLocales() {
@@ -42,26 +37,32 @@ export function useCoverageReport(reference: string) {
   })
 }
 
-/** Paged keys `locale` does not translate; skipped while either locale is empty. */
-export function useMissingKeys(reference: string, locale: string) {
+type MissingKeysOptions = {
+  readonly reference: string
+  readonly locale: string
+  readonly cursor: string
+  readonly onCursorChange: (cursor: string) => void
+}
+
+/** Keys `locale` does not translate; skipped while either locale is empty. */
+export function useMissingKeys({
+  reference,
+  locale,
+  cursor,
+  onCursorChange,
+}: MissingKeysOptions): CursorPageState<string> {
   const client = useClient()
 
-  return useInfiniteQuery<
-    MissingKeysPage,
-    Error,
-    InfiniteData<MissingKeysPage>,
-    QueryKey,
-    string | undefined
-  >({
+  return useCursorPage<string>({
     queryKey: ["coverage-missing", client, reference, locale],
     enabled: reference !== "" && locale !== "",
-    initialPageParam: undefined,
-    getNextPageParam: (lastPage) => lastPage.next ?? undefined,
-    queryFn: async ({ pageParam }) => {
+    cursor,
+    onCursorChange,
+    fetchPage: async (pageCursor) => {
       const result = await client.GET("/coverage/{reference}/{locale}/missing", {
         params: {
           path: { reference, locale },
-          query: { limit: 50, cursor: pageParam },
+          query: { limit: 50, cursor: pageCursor },
         },
       })
       return result.data!

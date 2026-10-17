@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, error::Error, fmt::Display, sync::Arc};
 use anyhow::Result;
 use serde::Serialize;
 
-pub use crate::query::{Page, QueryCursor, SortOrder};
+pub use crate::query::{Cursor, Page, SortOrder};
 pub mod mem;
 pub mod observer;
 pub mod redb;
@@ -11,21 +11,27 @@ pub use observer::ObserverRegistry;
 
 // "locale:namespace.key":"Value"
 
-/// Filter of a [`KVRead::list`] query: a case-insensitive substring matched
-/// against the key or the value. redb only indexes the key order, so it is
-/// applied while scanning.
-pub type KVFilter = Option<String>;
-
-/// Cursor of a [`KVRead::list`] query, whose position is the last key returned.
-pub type KVCursor = QueryCursor<KVFilter, String>;
+/// Cursor of a [`KVRead::list`] query: the key the page it names starts at.
+pub type KVCursor = Cursor<String>;
 
 /// Read half of the store: implemented by the live store and, once versioned
 /// reading lands, by read-only snapshots of it.
 pub trait KVRead {
     fn get(&self, locale: &str, key: &str) -> Result<Option<String>>;
-    /// Returns one page of `limit` entries for `cursor`. Start with
-    /// [`QueryCursor::new`] and pass the previous [`Page::next`] afterwards.
-    fn list(&self, locale: &str, cursor: &KVCursor, limit: usize) -> Result<KVPage>;
+    /// Returns one page of `limit` entries: the entries of `locale` from the
+    /// cursor's place onward, in `order`, keeping those whose key or value
+    /// contains `keyword` when one is given (case-insensitively; redb only
+    /// indexes the key order, so the keyword is applied while scanning). Start
+    /// with [`Cursor::first`] and pass the [`Page::next`] of the page on screen
+    /// afterwards.
+    fn list(
+        &self,
+        locale: &str,
+        order: SortOrder,
+        keyword: Option<&str>,
+        cursor: &KVCursor,
+        limit: usize,
+    ) -> Result<KVPage>;
     /// Locale and entry counts read from table metadata, without scanning rows.
     fn statistics(&self) -> Result<KVStatistics>;
 }
@@ -45,8 +51,15 @@ impl<T: KVRead + ?Sized> KVRead for Arc<T> {
         (**self).get(locale, key)
     }
 
-    fn list(&self, locale: &str, cursor: &KVCursor, limit: usize) -> Result<KVPage> {
-        (**self).list(locale, cursor, limit)
+    fn list(
+        &self,
+        locale: &str,
+        order: SortOrder,
+        keyword: Option<&str>,
+        cursor: &KVCursor,
+        limit: usize,
+    ) -> Result<KVPage> {
+        (**self).list(locale, order, keyword, cursor, limit)
     }
 
     fn statistics(&self) -> Result<KVStatistics> {
@@ -92,7 +105,7 @@ pub struct KVEntry {
     pub value: String,
 }
 
-/// One page of entries plus the cursor that resumes the listing.
+/// One page of entries plus the cursor that reaches the page after it.
 pub type KVPage = Page<KVEntry, KVCursor>;
 
 #[derive(Debug, Clone, Serialize)]
